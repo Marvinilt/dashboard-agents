@@ -57,3 +57,4 @@ export const PhaserGame = ({ onAgentSelect, onGameReady }) => {
     </div>
   );
 };
+

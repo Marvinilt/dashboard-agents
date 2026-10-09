@@ -144,3 +144,4 @@ export const AgentSidebar = ({ agent, logs = [], onClose, onSendResponse }) => {
     </div>
   );
 };
+

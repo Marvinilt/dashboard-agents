@@ -180,3 +180,4 @@ export class Avatar extends Phaser.GameObjects.Container {
     });
   }
 }
+

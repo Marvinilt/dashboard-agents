@@ -101,3 +101,4 @@ export function generateProceduralTextures(scene) {
     doorG.destroy();
   }
 }
+

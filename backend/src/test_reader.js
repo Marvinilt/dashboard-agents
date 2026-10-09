@@ -45,3 +45,4 @@ rl.on('close', () => {
   console.log('Roles detectados:', Array.from(detectedRoles));
   console.log('¡Prueba superada con éxito!');
 });
+

@@ -10,6 +10,7 @@ const BACKEND_URL = 'http://localhost:3001';
 export function App() {
   const [sessions, setSessions] = useState([]);
   const [selectedSessionId, setSelectedSessionId] = useState('');
+  const [customDirectory, setCustomDirectory] = useState('');
   const [mode, setMode] = useState('simulation');
   const [speed, setSpeed] = useState(3);
   const [simStatus, setSimStatus] = useState(null);
@@ -36,22 +37,18 @@ export function App() {
     });
 
     socket.on('AGENT_EVENT', (event) => {
-      // Guardar log
       setTelemetryLogs((prev) => [...prev.slice(-100), event]);
 
-      // Notificar a la escena de Phaser para mover / animar al avatar
       if (officeSceneRef.current) {
         officeSceneRef.current.handleTelemetryEvent(event);
       }
 
-      // Actualizar métricas
       setMetrics((prev) => ({
         ...prev,
         totalEvents: prev.totalEvents + 1,
         blockedCount: event.state === 'WAITING_INPUT' ? prev.blockedCount + 1 : prev.blockedCount
       }));
 
-      // Si el agente seleccionado recibe una actualización, refrescarlo
       setSelectedAgent((current) => {
         if (current && current.agentId === event.agentId) {
           return {
@@ -84,22 +81,31 @@ export function App() {
       const data = await res.json();
       setSessions(data.sessions || []);
       setSimStatus(data.status);
+      if (data.customDirectory) {
+        setCustomDirectory(data.customDirectory);
+      }
       if (data.sessions?.length > 0 && !selectedSessionId) {
-        // Seleccionar por defecto la primera
-        handleSelectSession(data.sessions[0].id);
+        handleSelectSession(data.sessions[0].id, data.sessions[0].path);
       }
     } catch (err) {
       console.error('Error cargando sesiones:', err);
     }
   };
 
-  const handleSelectSession = async (sessionId) => {
+  const handleSelectSession = async (sessionId, sessionPath = null) => {
     setSelectedSessionId(sessionId);
+    const targetSession = sessions.find(s => s.id === sessionId) || (sessionPath ? { path: sessionPath } : null);
+
     try {
       await fetch(`${BACKEND_URL}/api/sessions/select`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, mode, speed })
+        body: JSON.stringify({
+          sessionId,
+          sessionPath: targetSession?.path,
+          mode,
+          speed
+        })
       });
       if (officeSceneRef.current) {
         officeSceneRef.current.resetOffice();
@@ -107,6 +113,26 @@ export function App() {
       setTelemetryLogs([]);
     } catch (err) {
       console.error('Error al cambiar sesión:', err);
+    }
+  };
+
+  const handleSetCustomDirectory = async (directoryPath) => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/sessions/set-directory`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ directoryPath })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setCustomDirectory(data.customDirectory);
+        await fetchSessions();
+      } else {
+        alert(data.error || 'No se pudo explorar la carpeta.');
+      }
+    } catch (err) {
+      console.error('Error escaneando directorio personalizado:', err);
+      alert('Error al acceder al directorio indicado.');
     }
   };
 
@@ -166,7 +192,7 @@ export function App() {
             <h1 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
               Agent Virtual HQ
               <span className="text-xs px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-400 border border-sky-500/20 font-mono">
-                v1.0
+                v1.1
               </span>
             </h1>
             <p className="text-xs text-slate-400">
@@ -197,7 +223,7 @@ export function App() {
         </div>
       </header>
 
-      {/* Selector de Sesión y Controles de Simulación */}
+      {/* Selector de Sesión por Fechas y Explorador de Carpetas */}
       <SessionSelector
         sessions={sessions}
         selectedSessionId={selectedSessionId}
@@ -208,6 +234,9 @@ export function App() {
         simStatus={simStatus}
         speed={speed}
         onSpeedChange={handleSpeedChange}
+        customDirectory={customDirectory}
+        onSetCustomDirectory={handleSetCustomDirectory}
+        onRefreshSessions={fetchSessions}
       />
 
       {/* Oficina Gamificada 2D con Phaser */}
