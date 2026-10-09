@@ -1,0 +1,18 @@
+{
+  "name": "dashboard-agents-backend",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Backend telemetry and simulation server for Gamified Agent Dashboard",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "test:parser": "node src/test_reader.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "chokidar": "^4.0.3",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "socket.io": "^4.8.1"
+  }
+}
