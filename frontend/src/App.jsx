@@ -16,6 +16,7 @@ export function App() {
   const [simStatus, setSimStatus] = useState(null);
   const [selectedAgent, setSelectedAgent] = useState(null);
   const [telemetryLogs, setTelemetryLogs] = useState([]);
+  const [agentStats, setAgentStats] = useState({});
   const [metrics, setMetrics] = useState({
     activeAgents: 0,
     blockedCount: 0,
@@ -49,6 +50,29 @@ export function App() {
         blockedCount: event.state === 'WAITING_INPUT' ? prev.blockedCount + 1 : prev.blockedCount
       }));
 
+      if (event._simulatorStatus) {
+        setSimStatus(prev => prev ? {
+          ...prev,
+          currentIndex: event._simulatorStatus.currentIndex,
+          totalEvents: event._simulatorStatus.totalEvents,
+          currentTimestamp: event.timestamp,
+          progress: event._simulatorStatus.totalEvents > 0 ? event._simulatorStatus.currentIndex / event._simulatorStatus.totalEvents : 0
+        } : prev);
+      }
+
+      setAgentStats((prev) => {
+        const current = prev[event.agentId] || { startTime: event.timestamp, count: 0 };
+        return {
+          ...prev,
+          [event.agentId]: {
+            startTime: current.startTime || event.timestamp,
+            count: current.count + 1,
+            agentRole: event.agentRole || current.agentRole || 'Subagente',
+            state: event.state || current.state || 'WORKING'
+          }
+        };
+      });
+
       setSelectedAgent((current) => {
         if (current && current.agentId === event.agentId) {
           return {
@@ -61,13 +85,50 @@ export function App() {
       });
     });
 
+    socket.on('SIMULATION_JUMPED', (data) => {
+      console.log(`[React] Simulación saltó al índice ${data.currentIndex}`);
+      if (officeSceneRef.current) {
+        officeSceneRef.current.resetOffice();
+        if (data.timestamp) {
+          officeSceneRef.current.currentSimTime = new Date(data.timestamp).getTime();
+        }
+        Object.values(data.lastEventsByAgent).forEach(event => {
+          officeSceneRef.current.handleTelemetryEvent(event, true);
+        });
+        officeSceneRef.current.checkInactivityLifecycle();
+      }
+      setTelemetryLogs(data.logsSlice);
+      setAgentStats(data.stats);
+      setMetrics((prev) => ({
+        ...prev,
+        totalEvents: data.totalEvents,
+        blockedCount: data.blockedCount
+      }));
+      setSimStatus(prev => prev ? { 
+        ...prev, 
+        currentIndex: data.currentIndex, 
+        currentTimestamp: data.timestamp, 
+        progress: data.totalEvents > 0 ? data.currentIndex / data.totalEvents : 0 
+      } : prev);
+    });
+
     socket.on('SESSION_CHANGED', ({ sessionId }) => {
       console.log(`[React] Cambio de sesión detectado a: ${sessionId}`);
       if (officeSceneRef.current) {
         officeSceneRef.current.resetOffice();
       }
       setTelemetryLogs([]);
+      setAgentStats({});
       setSelectedAgent(null);
+    });
+
+    socket.on('SIMULATION_COMPLETED', (data) => {
+      console.log(`[React] Simulación completada para: ${data.sessionId}`);
+      setSimStatus(prev => prev ? {
+        ...prev,
+        isRunning: false,
+        currentIndex: data.totalEvents
+      } : prev);
     });
 
     return () => {
@@ -97,7 +158,7 @@ export function App() {
     const targetSession = sessions.find(s => s.id === sessionId) || (sessionPath ? { path: sessionPath } : null);
 
     try {
-      await fetch(`${BACKEND_URL}/api/sessions/select`, {
+      const res = await fetch(`${BACKEND_URL}/api/sessions/select`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -107,6 +168,11 @@ export function App() {
           speed
         })
       });
+      const data = await res.json();
+      if (data.status) {
+        setSimStatus(data.status);
+      }
+      
       if (officeSceneRef.current) {
         officeSceneRef.current.resetOffice();
       }
@@ -143,12 +209,12 @@ export function App() {
     }
   };
 
-  const handleControlSimulator = async (action) => {
+  const handleControlSimulator = async (action, payload = {}) => {
     try {
       const res = await fetch(`${BACKEND_URL}/api/simulator/control`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action })
+        body: JSON.stringify({ action, ...payload })
       });
       const data = await res.json();
       setSimStatus(data.status);
@@ -255,6 +321,17 @@ export function App() {
       <AgentSidebar
         agent={selectedAgent}
         logs={telemetryLogs.filter((l) => !selectedAgent || l.agentId === selectedAgent.agentId)}
+        agentStats={selectedAgent ? agentStats[selectedAgent.agentId] : null}
+        allAgentStats={agentStats}
+        onSelectAgent={(agentId) => {
+          if (agentStats[agentId]) {
+            setSelectedAgent({
+              agentId,
+              agentRole: agentStats[agentId].agentRole,
+              state: agentStats[agentId].state
+            });
+          }
+        }}
         onClose={() => setSelectedAgent(null)}
         onSendResponse={handleSendResponse}
       />

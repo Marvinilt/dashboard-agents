@@ -2,103 +2,199 @@
  * Genera texturas procedurales tipo pixel-art / isométrica limpias para la oficina
  */
 export function generateProceduralTextures(scene) {
-  // 1. Baldosa de piso Isométrica (Tile 64x32)
+  // 1. Baldosa de piso de Oficina (32x32 Top-Down Dark Cyber)
   if (!scene.textures.exists('floor_tile')) {
     const floorG = scene.make.graphics({ x: 0, y: 0, add: false });
-    floorG.fillStyle(0x1e293b, 1); // Slate oscuro
-    floorG.lineStyle(1, 0x334155, 0.8);
-    // Dibujar rombo isométrico
-    floorG.beginPath();
-    floorG.moveTo(32, 0);
-    floorG.lineTo(64, 16);
-    floorG.lineTo(32, 32);
-    floorG.lineTo(0, 16);
-    floorG.closePath();
-    floorG.fillPath();
-    floorG.strokePath();
-    floorG.generateTexture('floor_tile', 64, 32);
+    // Color base
+    floorG.fillStyle(0x111827, 1);
+    floorG.fillRect(0, 0, 32, 32);
+    // Borde iluminado arriba/izquierda (bevel)
+    floorG.fillStyle(0x1f2937, 1);
+    floorG.fillRect(0, 0, 32, 2);
+    floorG.fillRect(0, 0, 2, 32);
+    // Borde oscuro abajo/derecha
+    floorG.fillStyle(0x030712, 1);
+    floorG.fillRect(0, 30, 32, 2);
+    floorG.fillRect(30, 0, 2, 32);
+    // Detalle central muy sutil
+    floorG.fillStyle(0x374151, 0.1);
+    floorG.fillRect(4, 4, 24, 24);
+
+    floorG.generateTexture('floor_tile', 32, 32);
     floorG.destroy();
   }
 
-  // 1.b Baldosa de sala de descanso (Madera / Alfombra acogedora)
+  // 1.b Baldosa del Lounge (32x32 Tonos cálidos/madera oscura)
   if (!scene.textures.exists('lounge_tile')) {
     const loungeG = scene.make.graphics({ x: 0, y: 0, add: false });
-    loungeG.fillStyle(0x3f2d22, 1); // Tono cálido madera/alfombra
-    loungeG.lineStyle(1, 0x78350f, 0.8);
+    loungeG.fillStyle(0x18181b, 1); // Zin oscuro
+    loungeG.fillRect(0, 0, 32, 32);
+    loungeG.fillStyle(0x27272a, 1);
+    loungeG.fillRect(0, 0, 32, 2);
+    loungeG.fillRect(0, 0, 2, 32);
+    loungeG.fillStyle(0x09090b, 1);
+    loungeG.fillRect(0, 30, 32, 2);
+    loungeG.fillRect(30, 0, 2, 32);
+    
+    // Líneas simulando parqué
+    loungeG.lineStyle(1, 0x09090b, 0.5);
     loungeG.beginPath();
-    loungeG.moveTo(32, 0);
-    loungeG.lineTo(64, 16);
-    loungeG.lineTo(32, 32);
-    loungeG.lineTo(0, 16);
-    loungeG.closePath();
-    loungeG.fillPath();
+    loungeG.moveTo(8, 0); loungeG.lineTo(8, 32);
+    loungeG.moveTo(16, 0); loungeG.lineTo(16, 32);
+    loungeG.moveTo(24, 0); loungeG.lineTo(24, 32);
     loungeG.strokePath();
-    loungeG.generateTexture('lounge_tile', 64, 32);
+
+    loungeG.generateTexture('lounge_tile', 32, 32);
     loungeG.destroy();
   }
 
-  // 2. Escritorio + Computadora + Silla
-  if (!scene.textures.exists('desk_workstation')) {
+  // Textura de Línea Neón (para el pasillo)
+  if (!scene.textures.exists('neon_glow')) {
+    const glowG = scene.make.graphics({ x: 0, y: 0, add: false });
+    // Gradiente suave circular para usar como partícula o overlay
+    glowG.fillGradientStyle(0x38bdf8, 0x38bdf8, 0x38bdf8, 0x38bdf8, 1, 1, 0, 0);
+    glowG.fillCircle(16, 16, 16);
+    glowG.generateTexture('neon_glow', 32, 32);
+    glowG.destroy();
+  }
+
+  // Textura de Escritorio (96x64 píxeles, para ocupar 3x2 celdas de 32px)
+  if (!scene.textures.exists('desk_prop')) {
     const deskG = scene.make.graphics({ x: 0, y: 0, add: false });
-    // Mesa
-    deskG.fillStyle(0x475569, 1);
-    deskG.lineStyle(1, 0x64748b, 1);
-    deskG.fillRect(8, 18, 48, 20);
-    deskG.strokeRect(8, 18, 48, 20);
+    
+    // Sombra proyectada
+    deskG.fillStyle(0x000000, 0.4);
+    deskG.fillRoundedRect(4, 4, 96, 64, 4);
 
-    // Patas mesa
-    deskG.fillStyle(0x334155, 1);
-    deskG.fillRect(10, 38, 4, 14);
-    deskG.fillRect(50, 38, 4, 14);
-
-    // Silla de oficina detrás/al frente
+    // Mesa de madera oscura
     deskG.fillStyle(0x1e293b, 1);
-    deskG.fillCircle(32, 44, 9);
-    deskG.lineStyle(2, 0x0284c7, 0.8);
-    deskG.strokeCircle(32, 44, 9);
+    deskG.fillRoundedRect(0, 0, 96, 64, 4);
+    deskG.lineStyle(2, 0x0f172a, 1);
+    deskG.strokeRoundedRect(0, 0, 96, 64, 4);
 
+    // Separador central
+    deskG.fillStyle(0x334155, 1);
+    deskG.fillRect(0, 30, 96, 4);
+
+    // --- Estación 1 (Arriba Izquierda) ---
     // Monitor
     deskG.fillStyle(0x0f172a, 1);
-    deskG.fillRect(22, 4, 20, 14);
-    deskG.lineStyle(1, 0x38bdf8, 1);
-    deskG.strokeRect(22, 4, 20, 14);
-
-    // Soporte del monitor
-    deskG.fillStyle(0x64748b, 1);
-    deskG.fillRect(30, 18, 4, 3);
-
+    deskG.fillRoundedRect(12, 18, 24, 6, 2);
+    // Pantalla encendida
+    deskG.fillStyle(0x0ea5e9, 0.8);
+    deskG.fillRect(14, 20, 20, 2);
     // Teclado
-    deskG.fillStyle(0x334155, 1);
-    deskG.fillRect(23, 23, 18, 6);
+    deskG.fillStyle(0x0f172a, 1);
+    deskG.fillRect(16, 8, 16, 6);
 
-    deskG.generateTexture('desk_workstation', 64, 56);
+    // --- Estación 2 (Arriba Derecha) ---
+    deskG.fillStyle(0x0f172a, 1);
+    deskG.fillRoundedRect(60, 18, 24, 6, 2);
+    deskG.fillStyle(0x0ea5e9, 0.8);
+    deskG.fillRect(62, 20, 20, 2);
+    deskG.fillStyle(0x0f172a, 1);
+    deskG.fillRect(64, 8, 16, 6);
+
+    // --- Estación 3 (Abajo Izquierda) ---
+    deskG.fillStyle(0x0f172a, 1);
+    deskG.fillRoundedRect(12, 40, 24, 6, 2);
+    deskG.fillStyle(0xf97316, 0.8);
+    deskG.fillRect(14, 42, 20, 2);
+    deskG.fillStyle(0x0f172a, 1);
+    deskG.fillRect(16, 50, 16, 6);
+
+    // --- Estación 4 (Abajo Derecha) ---
+    deskG.fillStyle(0x0f172a, 1);
+    deskG.fillRoundedRect(60, 40, 24, 6, 2);
+    deskG.fillStyle(0xf97316, 0.8);
+    deskG.fillRect(62, 42, 20, 2);
+    deskG.fillStyle(0x0f172a, 1);
+    deskG.fillRect(64, 50, 16, 6);
+
+    // Plantitas o adornos en el centro
+    deskG.fillStyle(0x22c55e, 1);
+    deskG.fillCircle(48, 32, 6);
+    deskG.fillStyle(0x166534, 1);
+    deskG.fillCircle(48, 32, 3);
+
+    deskG.generateTexture('desk_prop', 100, 68);
     deskG.destroy();
   }
 
-  // 3. Sofá / Máquina de café para Sala de Descanso
-  if (!scene.textures.exists('coffee_station')) {
-    const coffeeG = scene.make.graphics({ x: 0, y: 0, add: false });
-    // Máquina dispensadora
-    coffeeG.fillStyle(0x854d0e, 1);
-    coffeeG.fillRect(6, 6, 36, 44);
-    coffeeG.fillStyle(0xfef08a, 1);
-    coffeeG.fillRect(14, 16, 20, 12);
-    // Taza / logo
-    coffeeG.fillStyle(0xffffff, 1);
-    coffeeG.fillCircle(24, 38, 4);
-    coffeeG.generateTexture('coffee_station', 48, 54);
-    coffeeG.destroy();
+  // Textura de Sofá Tipo U (128x64)
+  if (!scene.textures.exists('sofa_u_prop')) {
+    const sofaG = scene.make.graphics({ x: 0, y: 0, add: false });
+    // Sombra
+    sofaG.fillStyle(0x000000, 0.4);
+    sofaG.fillRoundedRect(4, 4, 128, 64, 8);
+    
+    // Asiento
+    sofaG.fillStyle(0x4c1d95, 1);
+    sofaG.fillRoundedRect(0, 0, 128, 64, 8);
+    // Espacio hueco (centro del sofá en U)
+    sofaG.fillStyle(0x18181b, 1); // Color del lounge tile o transparente
+    // Mejor hacerlo usando formas superpuestas
+    sofaG.clear();
+    // Sombra de los bloques
+    sofaG.fillStyle(0x000000, 0.4);
+    sofaG.fillRoundedRect(4, 4, 128, 32, 8); // Back
+    sofaG.fillRoundedRect(4, 4, 32, 64, 8);  // Left arm
+    sofaG.fillRoundedRect(100, 4, 32, 64, 8); // Right arm
+
+    // Bloques del sofá (Morado moderno)
+    sofaG.fillStyle(0x5b21b6, 1);
+    sofaG.fillRoundedRect(0, 0, 128, 32, 8); // Back
+    sofaG.fillRoundedRect(0, 0, 32, 64, 8);  // Left arm
+    sofaG.fillRoundedRect(96, 0, 32, 64, 8); // Right arm
+
+    // Cojines
+    sofaG.fillStyle(0x4c1d95, 1);
+    sofaG.fillRoundedRect(8, 8, 112, 20, 4);
+    sofaG.fillRoundedRect(8, 8, 20, 50, 4);
+    sofaG.fillRoundedRect(100, 8, 20, 50, 4);
+
+    sofaG.generateTexture('sofa_u_prop', 132, 68);
+    sofaG.destroy();
   }
 
-  // 4. Puerta de entrada (Spawn/Despawn point)
-  if (!scene.textures.exists('door_portal')) {
-    const doorG = scene.make.graphics({ x: 0, y: 0, add: false });
-    doorG.fillStyle(0x0284c7, 0.3);
-    doorG.fillRoundedRect(4, 4, 40, 52, 6);
-    doorG.lineStyle(2, 0x38bdf8, 1);
-    doorG.strokeRoundedRect(4, 4, 40, 52, 6);
-    doorG.generateTexture('door_portal', 48, 60);
-    doorG.destroy();
+  // Textura de Sofá Recto de 3 plazas (96x32)
+  if (!scene.textures.exists('sofa_3_prop')) {
+    const sofaG = scene.make.graphics({ x: 0, y: 0, add: false });
+    sofaG.fillStyle(0x000000, 0.4);
+    sofaG.fillRoundedRect(4, 4, 96, 32, 6);
+    sofaG.fillStyle(0x6d28d9, 1);
+    sofaG.fillRoundedRect(0, 0, 96, 32, 6);
+    sofaG.fillStyle(0x5b21b6, 1);
+    sofaG.fillRoundedRect(4, 4, 88, 14, 4); // Respaldo
+    sofaG.generateTexture('sofa_3_prop', 100, 36);
+    sofaG.destroy();
+  }
+
+  // Textura de Butaca (32x32)
+  if (!scene.textures.exists('butaca_prop')) {
+    const sofaG = scene.make.graphics({ x: 0, y: 0, add: false });
+    sofaG.fillStyle(0x000000, 0.4);
+    sofaG.fillRoundedRect(2, 2, 32, 32, 4);
+    sofaG.fillStyle(0x9333ea, 1);
+    sofaG.fillRoundedRect(0, 0, 32, 32, 4);
+    sofaG.fillStyle(0x7e22ce, 1);
+    sofaG.fillRoundedRect(4, 4, 24, 12, 4); // Respaldo
+    sofaG.generateTexture('butaca_prop', 36, 36);
+    sofaG.destroy();
+  }
+
+  // Textura de Sofá Gamer (48x64) - Orientado hacia la derecha (hacia la TV)
+  if (!scene.textures.exists('sofa_gamer_prop')) {
+    const sofaG = scene.make.graphics({ x: 0, y: 0, add: false });
+    sofaG.fillStyle(0x000000, 0.4);
+    sofaG.fillRoundedRect(4, 4, 48, 64, 8);
+    sofaG.fillStyle(0xbe185d, 1); // Rosa/Rojo cyber
+    sofaG.fillRoundedRect(0, 0, 48, 64, 8);
+    // Respaldo en la izquierda (para que miren a la derecha)
+    sofaG.fillStyle(0x9d174d, 1);
+    sofaG.fillRoundedRect(4, 4, 16, 56, 6);
+    sofaG.generateTexture('sofa_gamer_prop', 52, 68);
+    sofaG.destroy();
   }
 }
 

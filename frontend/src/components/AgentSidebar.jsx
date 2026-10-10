@@ -1,7 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, Terminal, Send, AlertCircle, Clock, Zap, Maximize2, Minimize2, Activity, PlayCircle } from 'lucide-react';
 
-export const AgentSidebar = ({ agent, logs = [], onClose, onSendResponse }) => {
+const ROLE_NAMES = {
+  team_leader: 'Team Leader (Orquestador)',
+  designer: 'UI/UX Designer',
+  dba: 'Arquitecto DBA',
+  developer: 'Senior Developer',
+  qa_tester: 'QA SDET',
+  security: 'Auditor Seguridad',
+  documenter: 'Documentador Técnico'
+};
+
+export const AgentSidebar = ({ agent, logs = [], agentStats, allAgentStats = {}, onSelectAgent, onClose, onSendResponse }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isWide, setIsWide] = useState(false);
   const [responseInput, setResponseInput] = useState('');
@@ -41,11 +51,12 @@ export const AgentSidebar = ({ agent, logs = [], onClose, onSendResponse }) => {
   const isWaitingInput = agent.state === 'WAITING_INPUT';
 
   // Calcular métricas del agente: Hora de inicio y cantidad de acciones ejecutadas
-  const firstLog = logs[0];
-  const startTime = firstLog?.timestamp
-    ? new Date(firstLog.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-    : '--:--:--';
-  const actionsCount = logs.length;
+  const startTime = agentStats?.startTime
+    ? new Date(agentStats.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    : logs[0]?.timestamp 
+      ? new Date(logs[0].timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      : '--:--:--';
+  const actionsCount = agentStats?.count || logs.length;
 
   return (
     <aside
@@ -56,6 +67,30 @@ export const AgentSidebar = ({ agent, logs = [], onClose, onSendResponse }) => {
       {/* Contenedor Principal del Panel */}
       <div className="w-full h-full bg-slate-900/98 backdrop-blur-xl border-r border-slate-800 shadow-2xl flex flex-col overflow-hidden text-slate-200">
         
+        {/* Selector de Agentes Alternativo */}
+        {Object.keys(allAgentStats).length > 1 && (
+          <div className="px-3.5 py-2 bg-slate-900 border-b border-slate-800 flex flex-col gap-1 shrink-0">
+            <label className="text-[9px] text-slate-500 uppercase font-bold tracking-wider">
+              Cambiar de Agente
+            </label>
+            <select
+              className="w-full bg-slate-950 border border-slate-700 text-slate-300 text-[11px] rounded px-2 py-1 outline-none focus:border-sky-500 font-mono transition-colors"
+              value={agent.agentId}
+              onChange={(e) => onSelectAgent && onSelectAgent(e.target.value)}
+            >
+              {Object.keys(allAgentStats).map(id => {
+                const role = allAgentStats[id].agentRole;
+                const displayName = ROLE_NAMES[role] || role || 'Subagente';
+                return (
+                  <option key={id} value={id}>
+                    {displayName} - {id.substring(0, 8)}
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+        )}
+
         {/* 1. Header del Agente */}
         <div className="px-3.5 py-2.5 bg-slate-950 border-b border-slate-800 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
@@ -70,7 +105,7 @@ export const AgentSidebar = ({ agent, logs = [], onClose, onSendResponse }) => {
             />
             <div className="truncate">
               <h2 className="text-xs font-bold font-mono tracking-tight text-white uppercase truncate flex items-center gap-1.5">
-                {agent.agentRole || 'Subagente'}
+                {ROLE_NAMES[agent.agentRole] || agent.agentRole || 'Subagente'}
               </h2>
               <span className="text-[10px] text-slate-500 font-mono block truncate">
                 {agent.agentId}
@@ -169,9 +204,12 @@ export const AgentSidebar = ({ agent, logs = [], onClose, onSendResponse }) => {
                     <span className="text-sky-400 font-bold group-hover:text-sky-300 truncate max-w-[190px]">
                       {tool}
                     </span>
-                    <span className="text-slate-600 shrink-0 font-light">{time}</span>
+                    <span className="text-slate-400 shrink-0 font-light">{time}</span>
                   </div>
-                  <p className="text-slate-300 break-words text-[10.5px] font-sans leading-tight">
+                  <p 
+                    className="text-slate-300 break-words text-[10.5px] font-sans leading-tight line-clamp-2"
+                    title={message}
+                  >
                     {message}
                   </p>
                 </div>

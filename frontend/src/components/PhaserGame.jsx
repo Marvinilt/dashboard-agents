@@ -14,8 +14,8 @@ export const PhaserGame = ({ onAgentSelect, onGameReady }) => {
     const config = {
       type: Phaser.AUTO,
       parent: containerRef.current,
-      width: 860,
-      height: 520,
+      width: 864,
+      height: 512,
       backgroundColor: '#090d16',
       scene: [OfficeScene],
       physics: {
@@ -50,7 +50,7 @@ export const PhaserGame = ({ onAgentSelect, onGameReady }) => {
 
   return (
     <div className="relative rounded-xl overflow-hidden border border-slate-800 shadow-2xl bg-slate-950 flex justify-center items-center">
-      <div ref={containerRef} className="w-[860px] h-[520px]" />
+      <div ref={containerRef} className="w-[864px] h-[512px]" />
       <div className="absolute bottom-3 left-4 text-xs font-mono text-slate-500 bg-slate-900/80 px-2 py-1 rounded border border-slate-800">
         🖱️ Haz clic en cualquier avatar para inspeccionar telemetría
       </div>

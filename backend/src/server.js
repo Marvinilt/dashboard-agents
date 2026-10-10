@@ -5,6 +5,7 @@ import cors from 'cors';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { exec } from 'child_process';
 import { SimulationEngine } from './simulator.js';
 import { LiveWatcher } from './watcher.js';
 
@@ -22,7 +23,9 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3001;
 const MOCK_DATA_DIR = path.resolve('mock_data');
-const SAMPLES_DIR = path.resolve('../Conversaciones ejemplo');
+const SAMPLES_DIR = fs.existsSync(path.resolve('Conversaciones ejemplo'))
+  ? path.resolve('Conversaciones ejemplo')
+  : path.resolve('../Conversaciones ejemplo');
 const DEFAULT_BRAIN_DIR = path.join(os.homedir(), '.gemini', 'antigravity', 'brain');
 
 const simulator = new SimulationEngine(io);
@@ -32,7 +35,14 @@ let activeMode = 'simulation'; // 'simulation' | 'live'
 let currentSession = null;
 let customDirectory = fs.existsSync(DEFAULT_BRAIN_DIR) ? DEFAULT_BRAIN_DIR : null;
 
-// Helper para escanear sesiones recursivamente o en primer nivel
+function formatSessionName(sourceTag, sessionId) {
+  if (sessionId === '29081f31-6f31-43f8-96d6-8ea576052c5f') {
+    return `[${sourceTag}] Multi-Agente: Orquestador EPIC-004`;
+  }
+  return `[${sourceTag}] ${sessionId}`;
+}
+
+// Helper para escanear sesiones
 function scanDirectoryForSessions(baseDir, sourceTag = 'Carpeta') {
   if (!baseDir || !fs.existsSync(baseDir)) return [];
   const results = [];
@@ -42,9 +52,10 @@ function scanDirectoryForSessions(baseDir, sourceTag = 'Carpeta') {
     const directTranscript = path.join(baseDir, '.system_generated', 'logs', 'transcript.jsonl');
     if (fs.existsSync(directTranscript)) {
       const stats = fs.statSync(directTranscript);
+      const sessId = path.basename(baseDir);
       results.push({
-        id: path.basename(baseDir),
-        name: `[${sourceTag}] ${path.basename(baseDir)}`,
+        id: sessId,
+        name: formatSessionName(sourceTag, sessId),
         path: baseDir,
         hasTranscript: true,
         source: sourceTag,
@@ -54,7 +65,7 @@ function scanDirectoryForSessions(baseDir, sourceTag = 'Carpeta') {
       return results;
     }
 
-    // 2. Si es una carpeta contenedora de sesiones (ej: brain o Conversaciones ejemplo)
+    // 2. Si es una carpeta contenedora de sesiones
     const entries = fs.readdirSync(baseDir, { withFileTypes: true });
     for (const dirent of entries) {
       if (dirent.isDirectory()) {
@@ -64,7 +75,7 @@ function scanDirectoryForSessions(baseDir, sourceTag = 'Carpeta') {
           const stats = fs.statSync(transcriptPath);
           results.push({
             id: dirent.name,
-            name: `[${sourceTag}] ${dirent.name}`,
+            name: formatSessionName(sourceTag, dirent.name),
             path: sessionPath,
             hasTranscript: true,
             source: sourceTag,
@@ -87,11 +98,11 @@ app.get('/api/sessions', (req, res) => {
   const sampleSessions = scanDirectoryForSessions(SAMPLES_DIR, 'Ejemplos');
   const customSessions = customDirectory ? scanDirectoryForSessions(customDirectory, 'Brain') : [];
 
-  // Unificar sesiones evitando duplicados por ruta
+  // Unificar sesiones evitando duplicados por ID de sesión o ruta
   const sessionsMap = new Map();
-  [...customSessions, ...sampleSessions, ...mockSessions].forEach((sess) => {
-    if (!sessionsMap.has(sess.path)) {
-      sessionsMap.set(sess.path, sess);
+  [...sampleSessions, ...mockSessions, ...customSessions].forEach((sess) => {
+    if (!sessionsMap.has(sess.id)) {
+      sessionsMap.set(sess.id, sess);
     }
   });
 
@@ -128,15 +139,36 @@ app.post('/api/sessions/set-directory', (req, res) => {
   });
 });
 
+// Endpoint para abrir el selector de carpetas nativo de Windows de forma rápida
+app.get('/api/system/browse-folder', (req, res) => {
+  const vbsScript = `
+Set objShell = CreateObject("Shell.Application")
+Set objFolder = objShell.BrowseForFolder(0, "Selecciona la carpeta de la sesion", &H0010, 0)
+If Not objFolder Is Nothing Then
+    Wscript.Echo objFolder.Self.Path
+End If
+`;
+  const tempVbsPath = path.join(os.tmpdir(), 'browseFolder.vbs');
+  fs.writeFileSync(tempVbsPath, vbsScript);
+
+  exec(`cscript //nologo "${tempVbsPath}"`, { windowsHide: false }, (error, stdout, stderr) => {
+    if (error) {
+      console.error('[FolderBrowser] Error:', error);
+      return res.status(500).json({ error: 'Error al abrir el selector de carpetas' });
+    }
+    const selectedPath = stdout.trim();
+    res.json({ path: selectedPath || null });
+  });
+});
+
 // Endpoint para seleccionar y arrancar una sesión
 app.post('/api/sessions/select', async (req, res) => {
   const { sessionId, sessionPath, mode = 'simulation', speed = 3 } = req.body;
 
-  // Re-escanear todo para encontrar la sesión solicitada
   const mockSessions = scanDirectoryForSessions(MOCK_DATA_DIR, 'Mock');
   const sampleSessions = scanDirectoryForSessions(SAMPLES_DIR, 'Ejemplos');
   const customSessions = customDirectory ? scanDirectoryForSessions(customDirectory, 'Brain') : [];
-  const allSessions = [...customSessions, ...sampleSessions, ...mockSessions];
+  const allSessions = [...sampleSessions, ...mockSessions, ...customSessions];
 
   let target = null;
   if (sessionPath) {
@@ -153,7 +185,7 @@ app.post('/api/sessions/select', async (req, res) => {
       const stats = fs.statSync(transcriptPath);
       target = {
         id: path.basename(sessionPath),
-        name: `[Manual] ${path.basename(sessionPath)}`,
+        name: formatSessionName('Manual', path.basename(sessionPath)),
         path: sessionPath,
         hasTranscript: true,
         lastModified: stats.mtime,
@@ -169,7 +201,6 @@ app.post('/api/sessions/select', async (req, res) => {
   activeMode = mode;
   currentSession = target;
 
-  // Notificar al frontend que se reinicie la oficina para la nueva sesión
   io.emit('SESSION_CHANGED', {
     sessionId: target.id,
     sessionPath: target.path,
@@ -182,8 +213,7 @@ app.post('/api/sessions/select', async (req, res) => {
     simulator.setSpeed(speed);
     try {
       const eventCount = await simulator.loadSession(target.path, target.id);
-      simulator.start();
-      res.json({ success: true, mode: 'simulation', eventCount, sessionId: target.id, target });
+      res.json({ success: true, mode: 'simulation', eventCount, sessionId: target.id, target, status: simulator.getStatus() });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
@@ -196,13 +226,15 @@ app.post('/api/sessions/select', async (req, res) => {
 
 // Endpoint para controlar reproducción
 app.post('/api/simulator/control', (req, res) => {
-  const { action, speed } = req.body;
+  const { action, speed, index } = req.body;
   if (action === 'pause') {
     simulator.stop();
   } else if (action === 'play') {
     simulator.start();
   } else if (action === 'speed' && speed) {
     simulator.setSpeed(speed);
+  } else if (action === 'jump' && index !== undefined) {
+    simulator.jumpToIndex(index);
   }
   res.json({ success: true, status: simulator.getStatus() });
 });
@@ -221,7 +253,7 @@ io.on('connection', (socket) => {
     io.emit('AGENT_EVENT', {
       eventId: `user_input_${Date.now()}`,
       agentId: payload.agentId,
-      agentRole: payload.agentRole || 'software_engineer',
+      agentRole: payload.agentRole || 'team_leader',
       state: 'WORKING',
       eventType: 'USER_INPUT_RECEIVED',
       metadata: {

@@ -3,78 +3,152 @@ import path from 'path';
 import readline from 'readline';
 import chokidar from 'chokidar';
 import { parseTranscriptLine } from './parser.js';
+import os from 'os';
+
+const DEFAULT_BRAIN_DIR = path.join(os.homedir(), '.gemini', 'antigravity', 'brain');
 
 export class LiveWatcher {
   constructor(io) {
     this.io = io;
-    this.watcher = null;
+    this.watchers = new Map();
+    this.processedLinesMap = new Map();
+    this.uuidToRoleMap = new Map();
+    this.pendingSubagents = [];
     this.currentSessionId = null;
-    this.currentFilePath = null;
-    this.processedLines = 0;
+    this.sessionPath = null;
   }
 
   start(sessionPath, sessionId) {
     this.stop();
     this.currentSessionId = sessionId;
-    this.currentFilePath = path.join(sessionPath, '.system_generated', 'logs', 'transcript.jsonl');
-    this.processedLines = 0;
+    this.sessionPath = sessionPath;
 
-    if (!fs.existsSync(this.currentFilePath)) {
-      console.warn(`[Watcher] El archivo ${this.currentFilePath} aún no existe, observando directorio.`);
+    const mainTranscript = path.join(sessionPath, '.system_generated', 'logs', 'transcript.jsonl');
+    this.watchTranscript(mainTranscript, { agentId: 'team_leader', agentRole: 'team_leader', agentName: 'Team Leader' });
+    console.log(`[Watcher] Observando en vivo sesión "${sessionId}"`);
+  }
+
+  watchTranscript(filePath, agentInfo) {
+    if (this.watchers.has(filePath)) return;
+
+    this.processedLinesMap.set(filePath, 0);
+
+    if (!fs.existsSync(filePath)) {
+      console.warn(`[Watcher] El archivo ${filePath} aún no existe, observando directorio.`);
     } else {
-      // Contar líneas iniciales para no duplicar si queremos procesar en vivo
-      this.catchUpExisting();
+      this.catchUpExisting(filePath, agentInfo);
     }
 
-    this.watcher = chokidar.watch(this.currentFilePath, {
+    const watcher = chokidar.watch(filePath, {
       persistent: true,
       usePolling: true,
       interval: 400
     });
 
-    this.watcher.on('change', async () => {
-      await this.readNewLines();
+    watcher.on('change', async () => {
+      await this.readNewLines(filePath, agentInfo);
     });
 
-    console.log(`[Watcher] Observando en vivo sesión "${sessionId}" en: ${this.currentFilePath}`);
+    this.watchers.set(filePath, watcher);
+    console.log(`[Watcher] Instancia de chokidar iniciada para: ${filePath}`);
   }
 
-  async catchUpExisting() {
-    if (!fs.existsSync(this.currentFilePath)) return;
-    const fileStream = fs.createReadStream(this.currentFilePath);
-    const rl = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
-    for await (const line of rl) {
-      this.processedLines++;
-      const evt = parseTranscriptLine(line, this.currentSessionId);
-      if (evt) {
-        this.io.emit('AGENT_EVENT', evt);
+  emitEventWithSubagents(evt) {
+    this.io.emit('AGENT_EVENT', evt);
+    
+    if (evt.eventType === 'AGENT_SPAWNED' && evt.metadata?.invokedSubagents?.length > 0) {
+      evt.metadata.invokedSubagents.forEach((sub, sIdx) => {
+        this.pendingSubagents.push(sub);
+        
+        const subEvent = {
+          eventId: `spawn_${sub.id}_${Date.now()}_${sIdx}`,
+          stepIndex: evt.stepIndex,
+          timestamp: evt.timestamp,
+          agentId: sub.id,
+          agentRole: sub.role,
+          agentName: sub.name,
+          state: 'SPAWNING',
+          eventType: 'AGENT_SPAWNED',
+          metadata: {
+            detailMessage: `Subagente ${sub.name} asignado al proyecto.`
+          }
+        };
+        setTimeout(() => {
+          this.io.emit('AGENT_EVENT', subEvent);
+        }, 120 * (sIdx + 1));
+      });
+    }
+
+    if (evt.eventType === 'SUBAGENT_CREATED' && evt.metadata?.toolArgs?.conversationId) {
+      const uuid = evt.metadata.toolArgs.conversationId;
+      const logUri = evt.metadata.toolArgs.logAbsoluteUri;
+      
+      const mappedSubagent = this.pendingSubagents.shift();
+      const agentInfo = mappedSubagent ? {
+        agentId: mappedSubagent.id,
+        agentRole: mappedSubagent.role,
+        agentName: mappedSubagent.name
+      } : { agentId: uuid, agentRole: 'developer', agentName: 'Desarrollador' };
+      
+      this.uuidToRoleMap.set(uuid, agentInfo);
+      
+      let subagentPath = null;
+      if (logUri && logUri.startsWith('file:///')) {
+        let uriPath = logUri.replace('file:///', '');
+        uriPath = decodeURIComponent(uriPath);
+        // Arreglar separadores en Windows
+        uriPath = uriPath.split('/').join(path.sep);
+        subagentPath = uriPath;
+      } else {
+        // Fallback: tratar de buscarlo en brain
+        subagentPath = path.join(DEFAULT_BRAIN_DIR, uuid, '.system_generated', 'logs', 'transcript.jsonl');
       }
+
+      this.watchTranscript(subagentPath, agentInfo);
     }
   }
 
-  async readNewLines() {
-    if (!fs.existsSync(this.currentFilePath)) return;
-    const fileStream = fs.createReadStream(this.currentFilePath);
+  async catchUpExisting(filePath, agentInfo) {
+    if (!fs.existsSync(filePath)) return;
+    const fileStream = fs.createReadStream(filePath);
+    const rl = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
+    let lines = 0;
+    for await (const line of rl) {
+      lines++;
+      const evt = parseTranscriptLine(line, agentInfo);
+      if (evt) {
+        this.emitEventWithSubagents(evt);
+      }
+    }
+    this.processedLinesMap.set(filePath, lines);
+  }
+
+  async readNewLines(filePath, agentInfo) {
+    if (!fs.existsSync(filePath)) return;
+    const fileStream = fs.createReadStream(filePath);
     const rl = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
     let currentLine = 0;
+    const processedLines = this.processedLinesMap.get(filePath) || 0;
 
     for await (const line of rl) {
       currentLine++;
-      if (currentLine > this.processedLines) {
-        this.processedLines = currentLine;
-        const parsed = parseTranscriptLine(line, this.currentSessionId);
+      if (currentLine > processedLines) {
+        this.processedLinesMap.set(filePath, currentLine);
+        const parsed = parseTranscriptLine(line, agentInfo);
         if (parsed) {
-          this.io.emit('AGENT_EVENT', parsed);
+          this.emitEventWithSubagents(parsed);
         }
       }
     }
   }
 
   stop() {
-    if (this.watcher) {
-      this.watcher.close();
-      this.watcher = null;
+    for (const [filePath, watcher] of this.watchers.entries()) {
+      watcher.close();
     }
+    this.watchers.clear();
+    this.processedLinesMap.clear();
+    this.uuidToRoleMap.clear();
+    this.pendingSubagents = [];
   }
 }
-
