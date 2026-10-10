@@ -271,6 +271,7 @@ export class Avatar extends Phaser.GameObjects.Container {
     this.on('pointerover', () => this.setScale(1.1));
     this.on('pointerout', () => this.setScale(1.0));
 
+    this.setDepth(8000 + this.y);
     scene.add.existing(this);
   }
 
@@ -344,6 +345,15 @@ export class Avatar extends Phaser.GameObjects.Container {
       case 'WORKING':
       case 'THINKING':
       case 'WAITING_INPUT':
+        if (this.assignedDesk) {
+          const isValid = (window.levelData.interactionNodes || []).some(
+            n => n.type === 'node_work' && n.col === this.assignedDesk.col && n.row === this.assignedDesk.row
+          );
+          if (!isValid && (window.levelData.interactionNodes || []).some(n => n.type === 'node_work')) {
+             this.assignedDesk = null;
+          }
+        }
+      
         if (!this.assignedDesk) {
           this.assignedDesk = this.scene.getRandomDesk(this.agentRole);
           this.assignedLounge = null; // Clear lounge if they go back to work
@@ -369,6 +379,15 @@ export class Avatar extends Phaser.GameObjects.Container {
       case 'RESTING':
         // El Team Leader nunca descansa, ignora este estado y se mantiene trabajando/esperando
         if (this.agentRole === 'team_leader') return;
+
+        if (this.assignedLounge) {
+          const isValid = (window.levelData.interactionNodes || []).some(
+            n => n.type === 'node_lounge' && n.col === this.assignedLounge.col && n.row === this.assignedLounge.row
+          );
+          if (!isValid && (window.levelData.interactionNodes || []).some(n => n.type === 'node_lounge')) {
+             this.assignedLounge = null;
+          }
+        }
 
         if (!this.assignedLounge) {
           this.assignedLounge = this.scene.getRandomLoungeSpot();
@@ -397,6 +416,12 @@ export class Avatar extends Phaser.GameObjects.Container {
 
   despawn(doorCoordinates, onFinished) {
     this.fsm.transition('DESPAWNING', doorCoordinates, onFinished);
+  }
+
+  update() {
+    // Asegurar que el avatar siempre esté por encima de todos los objetos del diseño (props tienen depth < 1000)
+    // Se usa 8000 + this.y para que mantengan Y-sorting entre ellos mismos si se cruzan.
+    this.setDepth(8000 + this.y);
   }
 
   destroy(fromScene) {

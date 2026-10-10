@@ -2,46 +2,42 @@
  * Genera texturas procedurales tipo pixel-art / isométrica limpias para la oficina
  */
 export function generateProceduralTextures(scene) {
-  // 1. Baldosa de piso de Oficina (32x32 Top-Down Dark Cyber)
+  // 1. Baldosa de piso de Oficina (32x32 Top-Down Dark Cyber sin bordes)
   if (!scene.textures.exists('floor_tile')) {
     const floorG = scene.make.graphics({ x: 0, y: 0, add: false });
-    // Color base
-    floorG.fillStyle(0x111827, 1);
+    // Color base (piso contínuo)
+    floorG.fillStyle(0x0f172a, 1);
     floorG.fillRect(0, 0, 32, 32);
-    // Borde iluminado arriba/izquierda (bevel)
-    floorG.fillStyle(0x1f2937, 1);
-    floorG.fillRect(0, 0, 32, 2);
-    floorG.fillRect(0, 0, 2, 32);
-    // Borde oscuro abajo/derecha
-    floorG.fillStyle(0x030712, 1);
-    floorG.fillRect(0, 30, 32, 2);
-    floorG.fillRect(30, 0, 2, 32);
-    // Detalle central muy sutil
-    floorG.fillStyle(0x374151, 0.1);
-    floorG.fillRect(4, 4, 24, 24);
+
+    // Textura sutil: pequeños puntos o rayas para dar la sensación de alfombra industrial o material sin cuadrícula
+    floorG.fillStyle(0x1e293b, 0.4);
+    floorG.fillRect(4, 4, 4, 4);
+    floorG.fillRect(20, 12, 4, 4);
+    floorG.fillRect(8, 24, 4, 4);
+    floorG.fillRect(28, 28, 2, 2);
 
     floorG.generateTexture('floor_tile', 32, 32);
     floorG.destroy();
   }
 
-  // 1.b Baldosa del Lounge (32x32 Tonos cálidos/madera oscura)
+  // 1.b Baldosa del Lounge (32x32 Tonos cálidos/madera oscura sin bordes gruesos)
   if (!scene.textures.exists('lounge_tile')) {
     const loungeG = scene.make.graphics({ x: 0, y: 0, add: false });
     loungeG.fillStyle(0x18181b, 1); // Zin oscuro
     loungeG.fillRect(0, 0, 32, 32);
-    loungeG.fillStyle(0x27272a, 1);
-    loungeG.fillRect(0, 0, 32, 2);
-    loungeG.fillRect(0, 0, 2, 32);
-    loungeG.fillStyle(0x09090b, 1);
-    loungeG.fillRect(0, 30, 32, 2);
-    loungeG.fillRect(30, 0, 2, 32);
     
-    // Líneas simulando parqué
+    // Líneas simulando tablas de madera (parqué contínuo sin bordes de celda)
     loungeG.lineStyle(1, 0x09090b, 0.5);
     loungeG.beginPath();
+    // Alternar líneas para simular tablones
     loungeG.moveTo(8, 0); loungeG.lineTo(8, 32);
-    loungeG.moveTo(16, 0); loungeG.lineTo(16, 32);
     loungeG.moveTo(24, 0); loungeG.lineTo(24, 32);
+    
+    // Separadores horizontales aleatorios para dar efecto de tablones
+    loungeG.moveTo(0, 12); loungeG.lineTo(8, 12);
+    loungeG.moveTo(8, 24); loungeG.lineTo(24, 24);
+    loungeG.moveTo(24, 6); loungeG.lineTo(32, 6);
+
     loungeG.strokePath();
 
     loungeG.generateTexture('lounge_tile', 32, 32);

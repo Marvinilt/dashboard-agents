@@ -3,6 +3,7 @@ import { io } from 'socket.io-client';
 import { PhaserGame } from './components/PhaserGame';
 import { SessionSelector } from './components/SessionSelector';
 import { AgentSidebar } from './components/AgentSidebar';
+import { EditorUI } from './components/EditorUI';
 import { Bot, Activity, CheckCircle, ShieldAlert, Cpu } from 'lucide-react';
 
 const BACKEND_URL = 'http://localhost:3001';
@@ -22,6 +23,25 @@ export function App() {
     blockedCount: 0,
     totalEvents: 0
   });
+  const [isMaximized, setIsMaximized] = useState(false);
+  const [editorMode, setEditorMode] = useState('PLAY');
+
+  useEffect(() => {
+    const handleEditorAction = (e) => {
+      if (e.detail.action === 'TOGGLE_MAXIMIZE') {
+        setIsMaximized(prev => !prev);
+      }
+    };
+    const handleEditorMode = (e) => {
+      setEditorMode(e.detail.mode);
+    };
+    window.addEventListener('editor-action', handleEditorAction);
+    window.addEventListener('set-editor-mode', handleEditorMode);
+    return () => {
+      window.removeEventListener('editor-action', handleEditorAction);
+      window.removeEventListener('set-editor-mode', handleEditorMode);
+    };
+  }, []);
 
   const socketRef = useRef(null);
   const officeSceneRef = useRef(null);
@@ -306,15 +326,29 @@ export function App() {
       />
 
       {/* Oficina Gamificada 2D con Phaser */}
-      <main className="flex-1 flex justify-center items-center">
-        <PhaserGame
-          onGameReady={(scene) => {
-            officeSceneRef.current = scene;
-          }}
-          onAgentSelect={(agent) => {
-            setSelectedAgent(agent);
-          }}
-        />
+      <main className={`flex-1 flex flex-col justify-center items-center gap-3 transition-all ${isMaximized ? 'fixed inset-0 z-50 bg-black/90 p-4' : ''}`}>
+        <div className={`relative flex flex-col transition-all ${isMaximized ? 'w-full h-full max-w-[1920px] max-h-[1080px]' : 'w-[864px]'}`}>
+          <EditorUI />
+          <div className={`relative bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-2xl ${isMaximized ? 'flex-1' : 'h-[512px]'}`}>
+            <PhaserGame
+              onGameReady={(scene) => {
+                officeSceneRef.current = scene;
+              }}
+              onAgentSelect={(agent) => {
+                setSelectedAgent(agent);
+              }}
+            />
+          </div>
+        </div>
+        {!isMaximized && (
+          <div className="text-xs font-mono text-slate-500 w-[864px] text-center bg-slate-900/50 py-1.5 rounded-lg border border-slate-800/50">
+            {editorMode === 'EDIT_LAYOUT' 
+              ? '🖱️ Puntero encima + R = Rotar | Q/E = Escalar | Shift+Click = Borrar'
+              : editorMode === 'EDIT_NODES'
+              ? '🖱️ Selecciona pincel a la derecha y haz clic para pintar | Shift+Click = Borrar'
+              : '🖱️ Haz clic en cualquier avatar para inspeccionar telemetría'}
+          </div>
+        )}
       </main>
 
       {/* Panel Lateral con Telemetría al dar Clic en Avatar */}
