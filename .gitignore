@@ -43,3 +43,8 @@ Thumbs.db
 
 Conversaciones ejemplo/
 backend/mock_data/
+
+# Archivos temporales de trabajo y capturas
+scratch/
+Captura de pantalla*.png
+*.jfif
