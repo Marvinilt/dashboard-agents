@@ -37,6 +37,8 @@ export function mapSubagentRole(typeName = '', roleStr = '') {
   };
 }
 
+let eventCounter = 0;
+
 /**
  * Normaliza y clasifica los eventos de bajo nivel de transcript.jsonl
  * a eventos semánticos para el dashboard y avatares.
@@ -77,8 +79,13 @@ export function parseTranscriptLine(lineStr, options = {}) {
       const content = raw.content;
       const lower = content.toLowerCase();
 
-      // Detección de mensajes emitidos por subagentes especializados
-      if (lower.includes('diseñador') || lower.includes('ux') || lower.includes('design_report')) {
+      // Si este archivo pertenece a un subagente dedicado, mantener su identidad original
+      if (options.agentId && options.agentId !== 'team_leader') {
+        agentId = options.agentId;
+        agentRole = options.agentRole || agentRole;
+        agentName = options.agentName || agentName;
+        detailMessage = 'Notificación de sistema para agente';
+      } else if (lower.includes('diseñador') || lower.includes('ux') || lower.includes('design_report')) {
         agentRole = 'designer';
         agentId = 'agent_designer';
         agentName = 'UI/UX Designer';
@@ -98,7 +105,7 @@ export function parseTranscriptLine(lineStr, options = {}) {
         agentId = 'agent_security';
         agentName = 'Auditor Seguridad';
         detailMessage = 'Auditor de Seguridad finalizó revisión de vulnerabilidades';
-      } else if (lower.includes('documentador') || lower.includes('dercas') || lower.includes('changelog') || lower.includes('documentación')) {
+      } else if (lower.includes('documentador') || lower.includes('documenter') || lower.includes('document') || lower.includes('docs') || lower.includes('dercas') || lower.includes('changelog') || lower.includes('documentación')) {
         agentRole = 'documenter';
         agentId = 'agent_documenter';
         agentName = 'Documentador Técnico';
@@ -214,7 +221,7 @@ export function parseTranscriptLine(lineStr, options = {}) {
   }
 
   return {
-    eventId: `evt_${stepIndex}_${Date.now()}`,
+    eventId: `evt_${agentId}_${stepIndex}_${Date.now()}_${++eventCounter}`,
     stepIndex,
     timestamp,
     agentId,

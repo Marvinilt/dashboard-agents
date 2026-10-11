@@ -20,35 +20,18 @@ export const AgentSidebar = ({ agent, logs = [], agentStats, allAgentStats = {},
   useEffect(() => {
     if (agent) {
       setIsOpen(true);
+      setResponseInput('');
     }
-  }, [agent]);
-
-  if (!agent) {
-    return (
-      <div className="fixed top-24 left-0 z-50">
-        <button
-          onClick={() => setIsOpen(!isOpen)}
-          className="bg-slate-900 border border-l-0 border-slate-700 text-slate-400 hover:text-slate-200 px-2 py-4 rounded-r-xl shadow-xl flex flex-col items-center gap-2 transition hover:bg-slate-800"
-          title="Ver agentes"
-        >
-          <Terminal className="w-4 h-4 text-sky-400" />
-          <span className="text-[10px] font-mono [writing-mode:vertical-lr] tracking-widest text-slate-400 uppercase">
-            Logs
-          </span>
-          <ChevronRight className="w-3.5 h-3.5" />
-        </button>
-      </div>
-    );
-  }
+  }, [agent?.agentId]);
 
   const handleSend = (e) => {
     e.preventDefault();
-    if (!responseInput.trim()) return;
+    if (!responseInput.trim() || !agent) return;
     onSendResponse(agent.agentId, responseInput);
     setResponseInput('');
   };
 
-  const isWaitingInput = agent.state === 'WAITING_INPUT';
+  const isWaitingInput = agent?.state === 'WAITING_INPUT';
 
   // Calcular métricas del agente: Hora de inicio y cantidad de acciones ejecutadas
   const startTime = agentStats?.startTime
@@ -58,14 +41,44 @@ export const AgentSidebar = ({ agent, logs = [], agentStats, allAgentStats = {},
       : '--:--:--';
   const actionsCount = agentStats?.count || logs.length;
 
+  const isPanelOpen = isOpen && !!agent;
+
   return (
     <aside
-      className={`fixed top-0 left-0 h-screen z-50 flex transition-all duration-300 ease-in-out ${
-        isOpen ? (isWide ? 'w-[520px]' : 'w-80 sm:w-96') : 'w-0'
+      className={`h-screen flex shrink-0 transition-all duration-300 ease-in-out relative z-30 ${
+        isPanelOpen ? (isWide ? 'w-[520px]' : 'w-80 sm:w-96') : 'w-0'
       }`}
     >
+      {/* Botón flotante para abrir cuando el panel está colapsado o no hay agente seleccionado */}
+      {!isPanelOpen && (
+        <button
+          onClick={() => {
+            if (!agent) {
+              const agentIds = Object.keys(allAgentStats);
+              if (agentIds.length > 0) {
+                const firstId = agentIds.find(id => allAgentStats[id]?.agentRole === 'team_leader') || agentIds[0];
+                if (onSelectAgent) onSelectAgent(firstId);
+              }
+            }
+            setIsOpen(true);
+          }}
+          className="absolute top-20 left-0 bg-slate-900 border border-l-0 border-slate-700 text-slate-400 hover:text-slate-200 px-1.5 py-3.5 rounded-r-xl shadow-xl flex flex-col items-center gap-1.5 hover:bg-slate-800 transition z-40 cursor-pointer"
+          title="Ver panel de logs de agentes"
+        >
+          <Terminal className="w-3.5 h-3.5 text-sky-400" />
+          <span className="text-[9px] font-mono [writing-mode:vertical-lr] tracking-widest text-slate-400 uppercase">
+            Logs
+          </span>
+          <ChevronRight className="w-3 h-3" />
+        </button>
+      )}
+
       {/* Contenedor Principal del Panel */}
-      <div className="w-full h-full bg-slate-900/98 backdrop-blur-xl border-r border-slate-800 shadow-2xl flex flex-col overflow-hidden text-slate-200">
+      <div className={`h-full bg-slate-900/98 backdrop-blur-xl border-r border-slate-800 shadow-2xl flex flex-col overflow-hidden text-slate-200 transition-all duration-300 ${
+        isPanelOpen ? (isWide ? 'w-[520px]' : 'w-80 sm:w-96') : 'w-0 border-none'
+      }`}>
+        {agent && (
+          <>
         
         {/* Selector de Agentes Alternativo */}
         {Object.keys(allAgentStats).length > 1 && (
@@ -181,7 +194,7 @@ export const AgentSidebar = ({ agent, logs = [], agentStats, allAgentStats = {},
         )}
 
         {/* 5. Feed de Acciones Ultracompacto Vertical */}
-        <div className="flex-1 overflow-y-auto p-2.5 space-y-1 font-mono text-[11px] select-text">
+        <div key={agent.agentId} className="flex-1 overflow-y-auto p-2.5 space-y-1 font-mono text-[11px] select-text">
           {logs.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-slate-600 italic py-10">
               <Terminal className="w-6 h-6 mb-2 opacity-40" />
@@ -197,7 +210,7 @@ export const AgentSidebar = ({ agent, logs = [], agentStats, allAgentStats = {},
 
               return (
                 <div
-                  key={l.eventId || index}
+                  key={`${agent.agentId}_${l.eventId || index}_${l.stepIndex ?? index}_${index}`}
                   className="px-2 py-1.5 rounded bg-slate-950/80 border border-slate-800/80 hover:border-slate-700 hover:bg-slate-950 transition-all leading-snug group"
                 >
                   <div className="flex items-center justify-between text-[10px] text-slate-500 mb-0.5">
@@ -231,29 +244,16 @@ export const AgentSidebar = ({ agent, logs = [], agentStats, allAgentStats = {},
             />
             <button
               type="submit"
-              className="px-2.5 py-1 bg-sky-600 hover:bg-sky-500 text-white rounded-md text-xs font-semibold flex items-center gap-1 transition shrink-0 shadow-sm"
+              className="px-2.5 py-1 bg-sky-600 hover:bg-sky-500 text-white rounded-md text-xs font-semibold flex items-center gap-1 transition shrink-0 shadow-sm cursor-pointer"
             >
               <Send className="w-3 h-3" />
               Enviar
             </button>
           </form>
         )}
+          </>
+        )}
       </div>
-
-      {/* Botón flotante para reabrir cuando el panel está colapsado */}
-      {!isOpen && (
-        <button
-          onClick={() => setIsOpen(true)}
-          className="absolute top-24 left-0 bg-slate-900 border border-l-0 border-slate-700 text-slate-300 hover:text-white px-2 py-4 rounded-r-xl shadow-2xl flex flex-col items-center gap-2 hover:bg-slate-800 transition"
-          title="Ver detalle del agente"
-        >
-          <Terminal className="w-4 h-4 text-sky-400" />
-          <span className="text-[10px] font-mono [writing-mode:vertical-lr] tracking-widest text-slate-400 uppercase">
-            Logs
-          </span>
-          <ChevronRight className="w-3.5 h-3.5" />
-        </button>
-      )}
     </aside>
   );
 };
