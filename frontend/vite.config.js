@@ -14,9 +14,8 @@ function saveLayoutPlugin() {
           req.on('data', chunk => { body += chunk.toString(); });
           req.on('end', () => {
             try {
-              // Validar que sea un JSON válido
               JSON.parse(body);
-              const filePath = path.resolve(__dirname, 'src/game/defaultLayout.json');
+              const filePath = path.resolve(process.cwd(), 'src/game/defaultLayout.json');
               fs.writeFileSync(filePath, body);
               res.statusCode = 200;
               res.setHeader('Content-Type', 'application/json');
@@ -35,7 +34,6 @@ function saveLayoutPlugin() {
   };
 }
 
-// https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss(), saveLayoutPlugin()],
   server: {

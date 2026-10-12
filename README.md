@@ -1,182 +1,106 @@
-# 🏢 Agent Virtual HQ (Dashboard Agents)
+# Gamified Agent Observability Dashboard
 
-> **Observabilidad gamificada en tiempo real para orquestadores multi-agente de Inteligencia Artificial.**
+![Version](https://img.shields.io/badge/version-1.5.0-blue.svg)
+![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-green.svg)
+![React](https://img.shields.io/badge/react-19.x-61dafb.svg)
+![Phaser](https://img.shields.io/badge/phaser-3.x-red.svg)
+![TailwindCSS](https://img.shields.io/badge/tailwindcss-4.x-38B2AC.svg)
+![Socket.IO](https://img.shields.io/badge/socket.io-4.x-black.svg)
+![License](https://img.shields.io/badge/license-MIT-yellow.svg)
 
-`Agent Virtual HQ` es una plataforma interactiva que transforma los registros de telemetría y transcripciones de ejecución (`transcript.jsonl`) generados por orquestadores de IA (como Google Gemini / Antigravity) en una **oficina virtual 2D isométrica**. Permite monitorear el comportamiento de agentes autónomos, sus estados de trabajo, el ciclo de vida de los subagentes especializados y responder a bloqueos que requieran intervención humana.
+## 📖 Descripción Funcional
 
----
+El **Gamified Agent Observability Dashboard** es un sistema innovador de monitoreo en tiempo real diseñado para el orquestador multi-agente Antigravity. Transforma la telemetría cruda en una experiencia interactiva inspirada en videojuegos top-down. Los agentes de IA se visualizan como avatares dentro de una oficina virtual; sus acciones, estados de procesamiento y requerimientos de intervención humana se traducen en comportamientos espaciales que facilitan el seguimiento de flujos multi-agente complejos.
 
-## 🚀 Características Principales
-
-* **🎮 Oficina Virtual Isométrica 2D (Phaser 4):**
-  * Cuadrícula de oficina con puestos de trabajo ergonómicos, puerta de entrada (`Spawn Portal`) y zona de descanso (`Coffee Break`).
-  * Desplazamiento animado de avatares hacia sus escritorios asignados con animaciones de balanceo y respiración.
-  * Transición automática a la sala de descanso tras inactividad prolongada y retorno al detectar nuevas tareas.
-
-* **👥 Avatares Procedimentales con Roles Especializados:**
-  * **Team Leader (Orquestador):** Corona dorada, atuendo celeste neón.
-  * **UI/UX Designer:** Boina magenta, atuendo coral (`designer`).
-  * **Arquitecto DBA:** Gafas y corbatín naranja, atuendo ámbar (`dba`).
-  * **Senior Full-Stack Developer:** Headset gamer con micrófono, atuendo azul (`developer`).
-  * **QA SDET & Testing:** Lupa de inspección, atuendo verde esmeralda (`qa_tester`).
-  * **Auditor de Seguridad:** Gafas oscuras de agente secreto, atuendo rojo (`security`).
-  * **Documentador Técnico:** Gafas de lectura y libreta, atuendo violeta (`documenter`).
-
-* **⚡ Motor Dual de Reproducción:**
-  * **Simulador Histórico:** Reproduce sesiones completadas con control de velocidad dinámico (`1x`, `2x`, `3x`, `5x`, `10x`) y cálculo proporcional de latencia real.
-  * **Live Watcher:** Monitoreo en tiempo real mediante `chokidar` con detección reactiva de nuevas líneas en `transcript.jsonl`.
-
-* **📊 Panel Lateral de Telemetría (Agent HUD):**
-  * Métricas por agente: hora de inicio de actividad, contador de acciones y badge de estado (`WORKING`, `THINKING`, `WAITING_INPUT`, `RESTING`, `ERROR`).
-  * Feed de eventos y llamadas a herramientas terminales (`run_command`, `view_file`, `write_to_file`, etc.).
-  * **Intervención Humana en Vivo:** Formulario de respuesta directa cuando un agente solicita confirmación o interacción del usuario (`WAITING_FOR_INPUT`).
-
-* **📂 Explorador Dinámico de Sesiones:**
-  * Integración automática con el directorio `brain` del sistema (`~/.gemini/antigravity/brain`).
-  * Selector ordenado cronológicamente por sesiones más recientes.
-  * Soporte para explorar y escanear cualquier ruta local del disco duro.
+### ✨ Características Principales
+* **Avatar State Machine & Procedural Animations:** Representación visual de estados: SPAWNING (entrando), WORKING (tecleando en escritorio), WAITING_INPUT (globo de diálogo `⚠️`), IDLE (descanso en lounge con `💤`), DESPAWNING (salida por elevador). Animaciones procedurales con squash & stretch, partículas de pisadas y caminata direccional 4-vías.
+* **Catálogo de Avatares y Variantes por Rol:** Spritesheets dedicados y procesados con IA para Tech Lead, Developer, QA Tester, Diseñadora, DBA Architect, Security Specialist y Documenter, con posturas contextuales (cuerpo completo en lounge vs. postura de trabajo en escritorio).
+* **Hover HUD Interactivo:** Tooltip interactivo al pasar el cursor sobre cualquier avatar mostrando nombre, rol, tiempo de espera en minutos desde su última actividad y su registro de log más reciente.
+* **Soporte Multi-Agente Recursivo:** Auto-descubrimiento y enganche a los logs de subagentes generados dinámicamente en tiempo real.
+* **Motor Dual de Reproducción:**
+  * **Simulador Histórico:** Reproducción de sesiones pasadas con acelerador de tiempo (1x a 10x) y barra de tiempo scrubbable.
+  * **Live Watcher:** Monitoreo en tiempo real reaccionando a los archivos de log directamente en disco.
+* **Inspector React (Agent HUD) & Modo Maximizado:** Panel lateral deslizable para visualizar terminal interna, pensamientos, herramientas y responder preguntas humanas. Modo maximizado contenido que amplía el lienzo al 100% del contenedor manteniendo la barra lateral accesible.
+* **Editor de Oficina Dual (Objetos y Estructuras):** Personalización en caliente de estaciones de trabajo, muebles, paredes y pisos celda por celda (32x32) con brocha continua (drag-to-paint), atajo de rotación (`R`) y catálogos desacoplados para alto rendimiento.
 
 ---
 
-## 📁 Estructura del Proyecto
+## 📸 Interfaz Gráfica
 
-```text
-DashboardAgents/
-├── backend/
-│   ├── mock_data/               # Copia local de sesiones para pruebas sin conexión
-│   ├── src/
-│   │   ├── parser.js            # Normalizador semántico de eventos y detección de roles/subagentes
-│   │   ├── server.js            # Servidor HTTP Express y Socket.io WebSockets
-│   │   ├── simulator.js         # Motor de simulación con aceleración de reproducción
-│   │   ├── watcher.js           # Live Watcher reactivo con Chokidar
-│   │   └── test_reader.js       # Script de verificación de lectura de eventos
-│   └── package.json
-│
-├── frontend/
-│   ├── public/                  # Íconos y activos estáticos
-│   ├── src/
-│   │   ├── assets/              # Activos visuales adicionales
-│   │   ├── components/
-│   │   │   ├── AgentSidebar.jsx # Panel lateral expandible de telemetría y chat humano
-│   │   │   ├── PhaserGame.jsx   # Contenedor React para el canvas del juego
-│   │   │   └── SessionSelector.jsx # Barra superior de control y selector de sesión
-│   │   ├── game/
-│   │   │   ├── assets.js        # Generador de texturas procedimentales pixel art
-│   │   │   ├── Avatar.js        # Clase Phaser.GameObjects.Container para sprites y accesorios
-│   │   │   ├── eventBus.js      # Bus de eventos desacoplado entre Phaser y React
-│   │   │   └── OfficeScene.js   # Escena isométrica de la oficina y ciclo de vida de escritorios
-│   │   ├── App.jsx              # Vista principal, conexión WebSockets y contadores HUD
-│   │   ├── index.css            # Configuración de Tailwind CSS y tipografía
-│   │   └── main.jsx             # Punto de entrada de React
-│   ├── vite.config.js
-│   └── package.json
-│
-├── Conversaciones ejemplo/      # Directorio con la sesión multi-agente de referencia
-│   └── 29081f31-6f31-43f8-96d6-8ea576052c5f/
-│       └── .system_generated/logs/transcript.jsonl
-│
-├── Documento_Requerimientos_General.md # Especificación formal y requerimientos del sistema
-├── Plan_Implementacion.md              # Plan de arquitectura y fases del proyecto
-├── .gitignore                          # Configuración de exclusión para Git
-└── README.md                           # Documentación principal del proyecto
+*(Agrega aquí tus capturas de pantalla)*
+* `![Oficina Virtual](/frontend/src/assets/oficina_demo.png)`
+* `![Panel HUD de Agente](/frontend/src/assets/hud_demo.png)`
+
+---
+
+## 🛠️ Requisitos de Entorno
+
+- **Node.js:** v18.0.0 o superior (recomendado v20+).
+- **NPM:** v9.0.0 o superior.
+- Navegador moderno compatible con **WebGL** (Chrome, Edge, Firefox).
+- Orquestador **Antigravity** generando logs en la carpeta local `.gemini/antigravity/brain/`.
+
+### Variables de Entorno (`.env`)
+*(Añadir al archivo `.env` en la carpeta `backend/` si es necesario, actualmente el sistema usa puertos fijos pero se pueden sobreescribir)*
+```env
+PORT=3001
+CORS_ORIGIN=http://localhost:5173
 ```
 
 ---
 
-## 🛠️ Requisitos Previos
+## 🚀 Guía de Instalación y Uso Rápido
 
-* **Node.js:** v18.0.0 o superior (recomendado v20+)
-* **NPM:** v9.0.0 o superior
-* Navegador moderno compatible con WebGL (Chrome, Edge, Firefox, Brave)
+### 1. Clonar e Instalar
+```bash
+git clone https://github.com/Marvinilt/dashboard-agents.git
+cd dashboard-agents
 
----
+# Instalar Backend
+cd backend
+npm install
 
-## 📦 Instalación
+# Instalar Frontend
+cd ../frontend
+npm install
+```
 
-1. **Clonar el repositorio:**
-   ```bash
-   git clone <URL_DEL_REPOSITORIO>
-   cd DashboardAgents
-   ```
+### 2. Ejecutar la Plataforma
+Abre dos terminales:
 
-2. **Instalar dependencias del Backend:**
-   ```bash
-   cd backend
-   npm install
-   cd ..
-   ```
-
-3. **Instalar dependencias del Frontend:**
-   ```bash
-   cd frontend
-   npm install
-   cd ..
-   ```
-
----
-
-## 🚦 Ejecución en Desarrollo
-
-Para ejecutar la plataforma completa se deben iniciar ambos servicios:
-
-### 1. Iniciar el Backend (Puerto 3001)
+**Terminal 1 (Backend):**
 ```bash
 cd backend
 npm start
 ```
-El servidor arrancará en `http://localhost:3001` exponiendo la API REST y el canal WebSockets.
+*(El backend arranca en el puerto 3001 y expone WebSockets)*
 
-### 2. Iniciar el Frontend (Puerto 5173 / 5174)
-En una terminal independiente:
+**Terminal 2 (Frontend):**
 ```bash
 cd frontend
 npm run dev
 ```
-Abre la URL indicada en la consola (por defecto `http://localhost:5173` o `http://localhost:5174`) en tu navegador web.
+Abre en tu navegador la URL: `http://localhost:5173`.
+
+### 3. Uso Rápido
+1. Usa el **desplegable superior** para seleccionar una sesión activa o de ejemplo.
+2. Haz clic en un **avatar** para abrir el Panel Lateral (HUD) y ver sus logs o responder a solicitudes pendientes.
+3. Utiliza los controles de **reproducción** (Play, Pausa, x1, x5) si estás en modo Simulación.
 
 ---
 
-## 🎯 Guía de Uso del Dashboard
+## 🤝 Cómo Contribuir
 
-1. **Seleccionar una Sesión:**
-   * Utiliza el menú desplegable en la barra superior.
-   * Selecciona `[Ejemplos] Multi-Agente: Orquestador EPIC-004` para reproducir la orquestación completa del equipo de ingeniería.
-2. **Controlar la Reproducción:**
-   * Usa los botones **Pausar / Reanudar** para detener el flujo en cualquier momento.
-   * Cambia el selector de velocidad a `1x`, `3x`, `5x` o `10x` para acelerar el análisis de sesiones largas.
-3. **Alternar entre Modos:**
-   * **Simulador:** Para analizar registros pasados.
-   * **Live Watcher:** Para conectarse a una sesión de orquestación que esté corriendo en vivo en tu máquina.
-4. **Inspeccionar un Agente:**
-   * Haz clic sobre cualquier avatar en la oficina virtual.
-   * Se abrirá el panel lateral izquierdo mostrando los detalles del rol, el historial de herramientas utilizadas y su estado actual.
-5. **Responder a Bloqueos:**
-   * Cuando un avatar muestre el ícono `❗` (*WAITING_INPUT*), selecciónalo e introduce la respuesta en el campo inferior del panel lateral para desbloquear su ejecución.
+1. Haz un **Fork** del repositorio.
+2. Crea una rama para tu feature (`git checkout -b feature/nueva-animacion`).
+3. Realiza tus commits respetando Semantic Versioning (`git commit -m 'feat: añade nueva animación de descanso'`).
+4. Haz push a la rama (`git push origin feature/nueva-animacion`).
+5. Abre un **Pull Request**.
 
----
-
-## 📡 API y Eventos WebSocket
-
-### Endpoints REST
-| Método | Endpoint | Descripción |
-| :--- | :--- | :--- |
-| `GET` | `/api/sessions` | Obtiene la lista unificada de sesiones disponibles ordenadas por fecha. |
-| `POST` | `/api/sessions/select` | Selecciona y activa una sesión (`sessionId`, `mode`, `speed`). |
-| `POST` | `/api/sessions/set-directory` | Configura una ruta de carpeta personalizada para escanear sesiones. |
-| `POST` | `/api/simulator/control` | Controla la reproducción (`action`: `'play'` \| `'pause'`, `speed`: número). |
-
-### Eventos WebSocket (Socket.io)
-* **Servidor ➔ Cliente:**
-  * `SERVER_READY`: Envía estado inicial del motor y sesión activa.
-  * `AGENT_EVENT`: Notifica eventos semánticos normalizados (Spawns, ejecuciones de herramientas, cambios de estado).
-  * `SESSION_CHANGED`: Notifica a los clientes la transición a una nueva sesión.
-  * `SIMULATION_COMPLETED`: Notifica la conclusión de la reproducción histórica.
-* **Cliente ➔ Servidor:**
-  * `USER_RESPONSE_INPUT`: Envía la respuesta o autorización del usuario para un agente bloqueado.
+Lee nuestro `CHANGELOG.md` y `docs/documentacionTecnica.md` para entender la arquitectura antes de realizar cambios estructurales.
 
 ---
 
 ## 📄 Licencia
 
-Este proyecto se distribuye bajo la licencia **MIT**. Consulta el archivo `LICENSE` si aplica para más detalles.
-
+Este proyecto se distribuye bajo la licencia **MIT**. Consulta el archivo `LICENSE` para más información.

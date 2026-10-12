@@ -49,8 +49,24 @@ export class SimulationEngine {
           
           // Queue para tracking de subagentes
           if (parsed.eventType === 'AGENT_SPAWNED' && parsed.metadata?.invokedSubagents?.length > 0) {
-          parsed.metadata.invokedSubagents.forEach(sub => {
+          parsed.metadata.invokedSubagents.forEach((sub, sIdx) => {
             console.log('[Simulator] Pushing subagent to queue:', sub); this.pendingSubagents.push(sub);
+            
+            // Generar evento de SPAWNING para el subagente y agregarlo a la cola
+            const subEvent = {
+              eventId: `spawn_${sub.id}_${Date.now()}_${sIdx}`,
+              stepIndex: parsed.stepIndex,
+              timestamp: new Date(new Date(parsed.timestamp).getTime() + (sIdx + 1)).toISOString(),
+              agentId: sub.id,
+              agentRole: sub.role,
+              agentName: sub.name,
+              state: 'SPAWNING',
+              eventType: 'AGENT_SPAWNED',
+              metadata: {
+                detailMessage: `Subagente ${sub.name} asignado al proyecto.`
+              }
+            };
+            this.eventsQueue.push(subEvent);
           });
         }
 
@@ -81,7 +97,7 @@ export class SimulationEngine {
               uriPath = uriPath.split('/').join(path.sep);
               subagentPath = uriPath;
             } else {
-              subagentPath = path.join(DEFAULT_BRAIN_DIR, uuid, '.system_generated', 'logs', 'transcript.jsonl');
+              subagentPath = path.join(DEFAULT_BRAIN_DIR, uuid, '.system_generated', 'logs', 'transcript_full.jsonl');
             }
             console.log('[Simulator] Cargando subagente:', subAgentInfo, subagentPath);
             subagentLoadPromises.push(this.loadTranscript(subagentPath, subAgentInfo));
@@ -101,7 +117,7 @@ export class SimulationEngine {
     this.currentIndex = 0;
     this.pendingSubagents = [];
 
-    const mainTranscript = path.join(sessionPath, '.system_generated', 'logs', 'transcript.jsonl');
+    const mainTranscript = path.join(sessionPath, '.system_generated', 'logs', 'transcript_full.jsonl');
     
     console.log(`[Simulator] Iniciando carga de sesión y subagentes para "${sessionId}"...`);
     
@@ -157,27 +173,6 @@ export class SimulationEngine {
       }
     });
 
-    if (currentEvent.eventType === 'AGENT_SPAWNED' && currentEvent.metadata?.invokedSubagents?.length > 0) {
-      currentEvent.metadata.invokedSubagents.forEach((sub, sIdx) => {
-        const subEvent = {
-          eventId: `spawn_${sub.id}_${Date.now()}_${sIdx}`,
-          stepIndex: currentEvent.stepIndex,
-          timestamp: currentEvent.timestamp,
-          agentId: sub.id,
-          agentRole: sub.role,
-          agentName: sub.name,
-          state: 'SPAWNING',
-          eventType: 'AGENT_SPAWNED',
-          metadata: {
-            detailMessage: `Subagente ${sub.name} asignado al proyecto.`
-          }
-        };
-        setTimeout(() => {
-          this.io.emit('AGENT_EVENT', subEvent);
-        }, 120 * (sIdx + 1));
-      });
-    }
-
     this.currentIndex++;
 
     let delayMs = 1200;
@@ -226,8 +221,7 @@ export class SimulationEngine {
     Object.values(stats).forEach(s => {
       if (s.state === 'WAITING_INPUT') blockedCount++;
     });
-
-    const logsSlice = this.eventsQueue.slice(Math.max(0, this.currentIndex - 100 + 1), this.currentIndex + 1);
+    const logsSlice = this.eventsQueue.slice(Math.max(0, this.currentIndex - 500 + 1), this.currentIndex + 1);
 
     this.io.emit('SIMULATION_JUMPED', {
       currentIndex: this.currentIndex,

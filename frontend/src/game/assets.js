@@ -44,6 +44,64 @@ export function generateProceduralTextures(scene) {
     loungeG.destroy();
   }
 
+  // 1.c Baldosa de piso de Oficina de DÍA (Madera clara cálida)
+  if (!scene.textures.exists('floor_tile_day')) {
+    const floorDayG = scene.make.graphics({ x: 0, y: 0, add: false });
+    // Base madera clara (tono roble/haya cálido)
+    floorDayG.fillStyle(0xd4b483, 1);
+    floorDayG.fillRect(0, 0, 32, 32);
+
+    // Tablones de madera con líneas sutiles
+    floorDayG.lineStyle(1, 0xb89560, 0.55);
+    floorDayG.beginPath();
+    floorDayG.moveTo(8, 0); floorDayG.lineTo(8, 32);
+    floorDayG.moveTo(24, 0); floorDayG.lineTo(24, 32);
+    
+    // Separadores horizontales alternados
+    floorDayG.moveTo(0, 10); floorDayG.lineTo(8, 10);
+    floorDayG.moveTo(8, 22); floorDayG.lineTo(24, 22);
+    floorDayG.moveTo(24, 8); floorDayG.lineTo(32, 8);
+    floorDayG.strokePath();
+
+    // Vetas suaves
+    floorDayG.fillStyle(0xe2caa0, 0.35);
+    floorDayG.fillRect(2, 2, 4, 18);
+    floorDayG.fillRect(12, 12, 6, 12);
+    floorDayG.fillRect(26, 4, 4, 18);
+
+    floorDayG.generateTexture('floor_tile_day', 32, 32);
+    floorDayG.destroy();
+  }
+
+  // 1.d Baldosa del Lounge de DÍA (Madera gris claro)
+  if (!scene.textures.exists('lounge_tile_day')) {
+    const loungeDayG = scene.make.graphics({ x: 0, y: 0, add: false });
+    // Base madera gris claro
+    loungeDayG.fillStyle(0xc9cbd1, 1);
+    loungeDayG.fillRect(0, 0, 32, 32);
+
+    // Tablones de madera en gris medio
+    loungeDayG.lineStyle(1, 0xa3a7b0, 0.55);
+    loungeDayG.beginPath();
+    loungeDayG.moveTo(10, 0); loungeDayG.lineTo(10, 32);
+    loungeDayG.moveTo(22, 0); loungeDayG.lineTo(22, 32);
+    
+    // Cortes de tablón
+    loungeDayG.moveTo(0, 14); loungeDayG.lineTo(10, 14);
+    loungeDayG.moveTo(10, 26); loungeDayG.lineTo(22, 26);
+    loungeDayG.moveTo(22, 10); loungeDayG.lineTo(32, 10);
+    loungeDayG.strokePath();
+
+    // Vetas suaves grisáceas
+    loungeDayG.fillStyle(0xdcdfe5, 0.35);
+    loungeDayG.fillRect(2, 4, 6, 14);
+    loungeDayG.fillRect(12, 8, 6, 16);
+    loungeDayG.fillRect(24, 14, 6, 14);
+
+    loungeDayG.generateTexture('lounge_tile_day', 32, 32);
+    loungeDayG.destroy();
+  }
+
   // Textura de Línea Neón (para el pasillo)
   if (!scene.textures.exists('neon_glow')) {
     const glowG = scene.make.graphics({ x: 0, y: 0, add: false });

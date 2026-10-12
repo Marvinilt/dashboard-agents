@@ -3,25 +3,18 @@ import * as EasyStar from 'easystarjs';
 import { generateProceduralTextures } from './assets.js';
 import { Avatar } from './Avatar.js';
 import { gameEvents, EVENTS } from './eventBus.js';
+import { mapRawRoleToKey } from './agentMapper.js';
 
 window.levelData = null; // Se inicializa en create()
 
-import deskImg from '../assets/desk.png';
-import deskTlImg from '../assets/desk_tl.png';
-import sofaImg from '../assets/sofa.png';
-import desk4Img from '../assets/desk_4.png';
-import coffeeBarImg from '../assets/coffee_bar.png';
-import barStoolImg from '../assets/bar_stool.png';
-import sofaRectoImg from '../assets/sofa_recto.png';
-import sofaSingleImg from '../assets/sofa_single.png';
-import tvWallImg from '../assets/tv_wall.png';
-import plant1Img from '../assets/plant_1.png';
-import plant2Img from '../assets/plant_2.png';
-import plant3Img from '../assets/plant_3.png';
-import printerImg from '../assets/printer.png';
-import waterImg from '../assets/water.png';
-import waterCoolerImg from '../assets/water_cooler.png';
-import cristalWallImg from '../assets/cristal_wall.png';
+const rootAssetFiles = import.meta.glob('../assets/*.png', { eager: true, import: 'default' });
+const objetoFiles = import.meta.glob('../assets/objetos/*.png', { eager: true, import: 'default' });
+const estructuraFiles = import.meta.glob('../assets/estructura/*.png', { eager: true, import: 'default' });
+const backgroundFiles = import.meta.glob('../assets/backgrounds/*.png', { eager: true, import: 'default' });
+const propFiles = { ...rootAssetFiles, ...objetoFiles, ...estructuraFiles, ...backgroundFiles };
+const structureKeys = new Set(
+  Object.keys(estructuraFiles).map(p => `prop_${p.split('/').pop().replace('.png', '')}`)
+);
 
 // =======================================================
 // Configuración de la Cuadrícula (Top-Down Orthogonal)
@@ -48,28 +41,70 @@ export class OfficeScene extends Phaser.Scene {
     // Load dynamically to avoid Vite module caching on refresh
     this.load.json('defaultLayout', '/src/game/defaultLayout.json?t=' + Date.now());
 
-    this.load.image('prop_desk', deskImg);
-    this.load.image('prop_desk_tl', deskTlImg);
-    this.load.image('prop_sofa', sofaImg);
-    this.load.image('prop_desk_4', desk4Img);
-    this.load.image('prop_coffee_bar', coffeeBarImg);
-    this.load.image('prop_bar_stool', barStoolImg);
-    this.load.image('prop_sofa_recto', sofaRectoImg);
-    this.load.image('prop_sofa_single', sofaSingleImg);
-    this.load.image('prop_tv_wall', tvWallImg);
-    this.load.image('prop_plant_1', plant1Img);
-    this.load.image('prop_plant_2', plant2Img);
-    this.load.image('prop_plant_3', plant3Img);
-    this.load.image('prop_printer', printerImg);
-    this.load.image('prop_water', waterImg);
-    this.load.image('prop_water_cooler', waterCoolerImg);
-    this.load.image('prop_cristal_wall', cristalWallImg);
+    Object.keys(propFiles).forEach(path => {
+      const filename = path.split('/').pop().replace('.png', '');
+      this.load.image(`prop_${filename}`, propFiles[path]);
+    });
+
+    // Cargar spritesheets de avatares
+    this.load.spritesheet('avatar_jefe', '/src/assets/avatares/jefe_sprite.png', {
+      frameWidth: Math.floor(2150 / 4), // 537
+      frameHeight: Math.floor(1523 / 2) // 761
+    });
+
+    this.load.spritesheet('avatar_designer', '/src/assets/avatares/diseñadora_sprite.png', {
+      frameWidth: Math.floor(2752 / 4), // 688
+      frameHeight: Math.floor(1536 / 2) // 768
+    });
+
+    const standardSpriteConfig = {
+      frameWidth: Math.floor(2752 / 4),
+      frameHeight: Math.floor(1536 / 2)
+    };
+    
+    this.load.spritesheet('avatar_dba', '/src/assets/avatares/dba_sprite.png', standardSpriteConfig);
+    this.load.spritesheet('avatar_developer', '/src/assets/avatares/developer_sprite.png', standardSpriteConfig);
+    this.load.spritesheet('avatar_qa', '/src/assets/avatares/qa_sprite.png', standardSpriteConfig);
+    this.load.spritesheet('avatar_security', '/src/assets/avatares/security_sprite.png', standardSpriteConfig);
+    this.load.spritesheet('avatar_documenter', '/src/assets/avatares/document_sprite.png', standardSpriteConfig);
+
+    // Variaciones especiales de escritorio trabajando (sin piernas / en escritorio con teclado)
+    this.load.spritesheet('avatares_working', '/src/assets/avatares/avatares_working_sprite.png', {
+      frameWidth: 688,
+      frameHeight: 768
+    });
   }
 
   create() {
     this.mode = 'PLAY'; // Modos: PLAY, EDIT_LAYOUT, EDIT_COLLISION, EDIT_NODES
     window.levelData = this.cache.json.get('defaultLayout');
     
+    // Ajustar la cámara para mostrar el área completa de paredes (X = -32, Y = -64)
+    this.cameras.main.setScroll(-32, -64);
+    
+    // Añadir paredes completas (fondo norte y laterales) superpuestas sobre el lienzo
+    const initialTheme = localStorage.getItem('office_theme') === 'day';
+    const initialKey = initialTheme ? 'prop_office_walls_day' : 'prop_office_walls';
+    this.bgWalls = this.add.image(-32, -64, initialKey)
+      .setOrigin(0, 0)
+      .setDisplaySize(928, 576)
+      .setDepth(-3);
+
+    // Alternar entre fondo nocturno y de día
+    window.addEventListener('toggle-day-night', (e) => {
+      const isDay = e.detail.isDay;
+      const textureKey = isDay ? 'prop_office_walls_day' : 'prop_office_walls';
+      if (this.bgWalls && this.textures.exists(textureKey)) {
+        this.bgWalls.setTexture(textureKey);
+      }
+      if (this.officeFloor) {
+        this.officeFloor.setTexture(isDay ? 'floor_tile_day' : 'floor_tile');
+      }
+      if (this.loungeFloor) {
+        this.loungeFloor.setTexture(isDay ? 'lounge_tile_day' : 'lounge_tile');
+      }
+    });
+
     // 1. Dibujar piso base
     this.createFloorPattern();
 
@@ -91,24 +126,47 @@ export class OfficeScene extends Phaser.Scene {
       });
     });
 
+    this.events.on('AGENT_HOVER', (data) => {
+      gameEvents.emit('AVATAR_HOVER', data);
+    });
+
+    this.events.on('AGENT_HOVER_OUT', (data) => {
+      gameEvents.emit('AVATAR_HOVER_OUT', data);
+    });
+
     // Controles de Cámara para Modo Editor
     this.editorKeys = this.input.keyboard.addKeys('W,A,S,D');
     this.cursors = this.input.keyboard.createCursorKeys();
     
     // Controles de Edición de Props
     this.input.keyboard.on('keydown-R', () => {
-      if (this.mode === 'EDIT_LAYOUT' && this.hoveredProp) {
+      if ((this.mode === 'EDIT_LAYOUT' || this.mode === 'EDIT_STRUCTURE') && this.hoveredProp) {
         this.hoveredProp.angle += 90;
         const data = window.levelData.props.find(p => p.id === this.hoveredProp.getData('propId'));
         if (data) {
           data.rotation = this.hoveredProp.angle;
           this.saveState();
         }
+      } else if (this.mode === 'EDIT_STRUCTURE' && this.activeStructureBrush) {
+        this.structureBrushRotation = ((this.structureBrushRotation || 0) + 90) % 360;
+        if (this.ghostStructure) {
+          this.ghostStructure.angle = this.structureBrushRotation;
+        }
+      } else if (this.mode === 'EDIT_NODES' && this.hoveredNodeData && this.hoveredNodeSprite) {
+        // Rotar nodo
+        const order = ['up', 'right', 'down', 'left'];
+        let currentIdx = order.indexOf(this.hoveredNodeData.direction || 'up');
+        let nextIdx = (currentIdx + 1) % 4;
+        this.hoveredNodeData.direction = order[nextIdx];
+        
+        const dirs = { 'up': 0, 'right': Math.PI/2, 'down': Math.PI, 'left': -Math.PI/2 };
+        this.hoveredNodeSprite.arrow.setRotation(dirs[this.hoveredNodeData.direction]);
+        this.saveState();
       }
     });
 
     this.input.keyboard.on('keydown-E', () => {
-      if (this.mode === 'EDIT_LAYOUT' && this.hoveredProp) {
+      if ((this.mode === 'EDIT_LAYOUT' || this.mode === 'EDIT_STRUCTURE') && this.hoveredProp) {
         this.hoveredProp.setDisplaySize(this.hoveredProp.displayWidth * 1.1, this.hoveredProp.displayHeight * 1.1);
         const data = window.levelData.props.find(p => p.id === this.hoveredProp.getData('propId'));
         if (data) {
@@ -120,7 +178,7 @@ export class OfficeScene extends Phaser.Scene {
     });
 
     this.input.keyboard.on('keydown-Q', () => {
-      if (this.mode === 'EDIT_LAYOUT' && this.hoveredProp) {
+      if ((this.mode === 'EDIT_LAYOUT' || this.mode === 'EDIT_STRUCTURE') && this.hoveredProp) {
         this.hoveredProp.setDisplaySize(this.hoveredProp.displayWidth * 0.9, this.hoveredProp.displayHeight * 0.9);
         const data = window.levelData.props.find(p => p.id === this.hoveredProp.getData('propId'));
         if (data) {
@@ -163,7 +221,7 @@ export class OfficeScene extends Phaser.Scene {
       this.mode = e.detail.mode;
       if (this.mode === 'PLAY') {
         this.cameras.main.setZoom(1);
-        this.cameras.main.setScroll(0, 0);
+        this.cameras.main.setScroll(-32, -64);
         this.editorGrid.setVisible(false);
         this.ghostSprite.setVisible(false);
         if (this.ghostNode) this.ghostNode.setVisible(false);
@@ -172,13 +230,13 @@ export class OfficeScene extends Phaser.Scene {
       }
     });
 
-    // 3. Eventos Drag & Drop de HTML5
+    // 3. Eventos Drag & Drop de HTML5 (Solo para EDIT_LAYOUT)
     const canvas = this.sys.game.canvas;
     
     canvas.addEventListener('dragover', (e) => {
       if (!window.currentDragItem) return;
-      if (this.mode !== 'EDIT_LAYOUT') return; // Nodos ya no usan HTML5 drag
-      e.preventDefault(); // Necesario para permitir el 'drop'
+      if (this.mode !== 'EDIT_LAYOUT') return;
+      e.preventDefault();
       
       const rect = canvas.getBoundingClientRect();
       const x = e.clientX - rect.left;
@@ -225,12 +283,38 @@ export class OfficeScene extends Phaser.Scene {
       const newY = this.ghostSprite.y;
       
       this.placeNewProp(propData.id, newX, newY, propData.width, propData.height);
+
+      // Limpiar puntero de Phaser para que el drop de HTML5 no arrastre la cámara
+      if (this.input.activePointer) {
+        this.input.activePointer.isDown = false;
+        this.input.activePointer.reset();
+      }
     });
 
-    // 4. MODO COLISIONES (Capa Pintable) Y MODO NODOS (Pincel)
+    // 4. MODO ESTRUCTURA (Pincel Piso/Paredes), COLISIONES Y NODOS
     this.collisionOverlay = this.add.graphics().setDepth(9997).setVisible(false);
     this.isDraggingObject = false;
+    this.isPaintingCollisions = false;
     this.isPaintingNodes = false;
+    this.isPaintingStructure = false;
+    this.activeStructureBrush = null;
+    this.structureBrushRotation = 0;
+
+    // Sprite fantasma para pintar estructuras cuadrícula por cuadrícula (32x32)
+    this.ghostStructure = this.add.image(0, 0, 'prop_floor_wood')
+      .setOrigin(0, 0)
+      .setDisplaySize(32, 32)
+      .setDepth(9998)
+      .setAlpha(0.65)
+      .setVisible(false);
+
+    window.addEventListener('set-structure-brush', (e) => {
+      this.activeStructureBrush = e.detail.prop;
+      this.structureBrushRotation = 0;
+      if (!this.activeStructureBrush && this.ghostStructure) {
+        this.ghostStructure.setVisible(false);
+      }
+    });
     
     this.input.on('pointerdown', (pointer) => {
       if (this.mode === 'EDIT_COLLISION' && pointer.button === 0) { // Clic Izquierdo
@@ -242,31 +326,70 @@ export class OfficeScene extends Phaser.Scene {
         const snappedX = Math.floor(worldPoint.x / GRID_SIZE) * GRID_SIZE;
         const snappedY = Math.floor(worldPoint.y / GRID_SIZE) * GRID_SIZE;
         this.placeNewNode(this.activeNodeBrush, snappedX, snappedY);
+      } else if (this.mode === 'EDIT_STRUCTURE' && pointer.button === 0 && this.activeStructureBrush) {
+        if (pointer.event.shiftKey) {
+          this.eraseStructureAt(pointer);
+        } else {
+          this.isPaintingStructure = true;
+          this.paintStructure(pointer);
+        }
       }
     });
 
-    // Modificamos el pointermove existente para incluir el pintado y paneo general
     this.input.on('pointermove', (pointer) => {
-      // Paneo con clic (Izquierdo, Central o Derecho) - siempre que no estemos pintando ni arrastrando un objeto
       const isPaintingCollision = this.mode === 'EDIT_COLLISION' && this.isPaintingCollisions && pointer.button === 0;
       const isPaintingNode = this.mode === 'EDIT_NODES' && this.isPaintingNodes && pointer.button === 0;
+      const isPaintingStructure = this.mode === 'EDIT_STRUCTURE' && this.isPaintingStructure && pointer.button === 0;
       
-      if (pointer.isDown && !isPaintingCollision && !isPaintingNode && !this.isDraggingObject) {
+      // Control de paneo de cámara:
+      // En modos de edición NO se panea con clic izquierdo normal para evitar mover la escena al interactuar o pintar.
+      // Se panea con: Botón Central, Botón Secundario, o manteniendo pulsada la barra espaciadora (o clic normal en PLAY).
+      const isPanAllowed = (
+        pointer.button === 1 || 
+        pointer.button === 2 || 
+        pointer.event.spaceKey || 
+        (this.mode === 'PLAY' && pointer.button === 0)
+      );
+
+      if (pointer.isDown && isPanAllowed && !isPaintingCollision && !isPaintingNode && !isPaintingStructure && !this.isDraggingObject) {
         this.cameras.main.scrollX -= (pointer.x - pointer.prevPosition.x) / this.cameras.main.zoom;
         this.cameras.main.scrollY -= (pointer.y - pointer.prevPosition.y) / this.cameras.main.zoom;
       }
       
-      // Pintado de Colisiones (Arrastrar Clic Izquierdo)
+      // Pintado de Colisiones
       if (isPaintingCollision) {
         this.paintCollision(pointer);
       }
 
-      // Pintado de Nodos (Arrastrar Clic Izquierdo)
+      // Pintado de Nodos
       if (isPaintingNode) {
         const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
         const snappedX = Math.floor(worldPoint.x / GRID_SIZE) * GRID_SIZE;
         const snappedY = Math.floor(worldPoint.y / GRID_SIZE) * GRID_SIZE;
         this.placeNewNode(this.activeNodeBrush, snappedX, snappedY);
+      }
+
+      // Pintado continuo de Estructura (Clic sostenido de 32x32)
+      if (this.mode === 'EDIT_STRUCTURE' && this.activeStructureBrush) {
+        const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+        const snappedX = Math.floor(worldPoint.x / GRID_SIZE) * GRID_SIZE;
+        const snappedY = Math.floor(worldPoint.y / GRID_SIZE) * GRID_SIZE;
+        
+        if (this.ghostStructure) {
+          this.ghostStructure.setTexture(this.activeStructureBrush.id);
+          this.ghostStructure.setDisplaySize(32, 32);
+          this.ghostStructure.setPosition(snappedX, snappedY);
+          this.ghostStructure.angle = this.structureBrushRotation || 0;
+          this.ghostStructure.setVisible(true);
+        }
+
+        if (pointer.isDown && pointer.event.shiftKey) {
+          this.eraseStructureAt(pointer);
+        } else if (isPaintingStructure) {
+          this.paintStructure(pointer);
+        }
+      } else if (this.ghostStructure) {
+        this.ghostStructure.setVisible(false);
       }
 
       // Pincel Ghost para Nodos
@@ -293,8 +416,15 @@ export class OfficeScene extends Phaser.Scene {
       if (this.isPaintingCollisions) {
         this.saveState();
       }
+      if (this.isPaintingNodes) {
+        this.saveState();
+      }
+      if (this.isPaintingStructure) {
+        this.saveState();
+      }
       this.isPaintingCollisions = false;
       this.isPaintingNodes = false;
+      this.isPaintingStructure = false;
     });
 
     // 5. MODO POSICIONES (Nodos de Interacción)
@@ -304,6 +434,10 @@ export class OfficeScene extends Phaser.Scene {
     window.addEventListener('set-editor-mode', (e) => {
       this.mode = e.detail.mode;
       this.ghostSprite.setVisible(false);
+      if (this.ghostStructure) this.ghostStructure.setVisible(false);
+      if (this.mode !== 'EDIT_STRUCTURE') {
+        this.activeStructureBrush = null;
+      }
       this.editorGrid.setVisible(this.mode !== 'PLAY');
       
       if (this.mode === 'EDIT_COLLISION') {
@@ -324,7 +458,7 @@ export class OfficeScene extends Phaser.Scene {
       
       if (this.mode === 'PLAY') {
         this.cameras.main.setZoom(1);
-        this.cameras.main.setScroll(0, 0);
+        this.cameras.main.setScroll(-32, -64);
       }
     });
 
@@ -439,7 +573,8 @@ export class OfficeScene extends Phaser.Scene {
         id: 'node_' + Date.now(),
         type: nodeType,
         col: col,
-        row: row
+        row: row,
+        direction: 'up' // Por defecto miran hacia arriba
       };
       window.levelData.interactionNodes.push(newNode);
       console.log(`[Editor] Nodo ${nodeType} añadido en col:${col}, row:${row}`);
@@ -460,53 +595,84 @@ export class OfficeScene extends Phaser.Scene {
     const pxX = node.col * GRID_SIZE + GRID_SIZE / 2;
     const pxY = node.row * GRID_SIZE + GRID_SIZE / 2;
     
+    // Asegurar dirección por defecto
+    if (!node.direction) node.direction = 'up';
+
     const color = node.type === 'node_work' ? 0x10b981 : (node.type === 'node_lounge' ? 0x3b82f6 : 0xffffff);
-    const circle = this.add.circle(pxX, pxY, 12, color, 0.8);
-    circle.setStrokeStyle(2, 0xffffff, 1);
-    circle.setDepth(9996);
-    circle.setVisible(this.mode === 'EDIT_NODES');
     
-    circle.setInteractive({ 
-      hitArea: new Phaser.Geom.Circle(12, 12, 16),
-      hitAreaCallback: Phaser.Geom.Circle.Contains,
+    const container = this.add.container(pxX, pxY);
+    container.setDepth(9996);
+    container.setVisible(this.mode === 'EDIT_NODES');
+
+    const circle = this.add.circle(0, 0, 12, color, 0.8);
+    circle.setStrokeStyle(2, 0xffffff, 1);
+    container.add(circle);
+
+    // Flecha indicadora (Triángulo blanco)
+    const arrow = this.add.triangle(0, -6, 0, -5, 5, 5, -5, 5, 0xffffff);
+    container.add(arrow);
+    container.arrow = arrow;
+
+    const dirs = { 'up': 0, 'right': Math.PI/2, 'down': Math.PI, 'left': -Math.PI/2 };
+    arrow.setRotation(dirs[node.direction]);
+
+    container.setSize(24, 24);
+    container.setInteractive({ 
       useHandCursor: true,
       draggable: true 
     });
 
-    circle.on('dragstart', () => {
+    container.on('dragstart', () => {
       if (this.mode === 'EDIT_NODES') this.isDraggingObject = true;
     });
     
-    circle.on('drag', (pointer, dragX, dragY) => {
+    container.on('drag', (pointer, dragX, dragY) => {
       if (this.mode !== 'EDIT_NODES') return;
       const snappedX = Math.floor(dragX / GRID_SIZE) * GRID_SIZE + GRID_SIZE / 2;
       const snappedY = Math.floor(dragY / GRID_SIZE) * GRID_SIZE + GRID_SIZE / 2;
-      circle.setPosition(snappedX, snappedY);
+      container.setPosition(snappedX, snappedY);
     });
     
-    circle.on('dragend', () => {
+    container.on('dragend', () => {
       this.isDraggingObject = false;
       if (this.mode !== 'EDIT_NODES') return;
-      const newCol = Math.floor(circle.x / GRID_SIZE);
-      const newRow = Math.floor(circle.y / GRID_SIZE);
+      const newCol = Math.floor(container.x / GRID_SIZE);
+      const newRow = Math.floor(container.y / GRID_SIZE);
+
       if (node.col !== newCol || node.row !== newRow) {
         node.col = newCol;
         node.row = newRow;
         this.saveState();
       }
     });
+
+    container.on('pointerover', () => {
+      this.hoveredNodeSprite = container;
+      this.hoveredNodeData = node;
+    });
+
+    container.on('pointerout', () => {
+      if (this.hoveredNodeSprite === container) {
+        this.hoveredNodeSprite = null;
+        this.hoveredNodeData = null;
+      }
+    });
     
-    circle.on('pointerdown', (pointer) => {
-      if (this.mode === 'EDIT_NODES' && pointer.event.shiftKey) {
+    container.on('pointerdown', (pointer) => {
+      if (this.mode === 'EDIT_NODES' && (pointer.event.shiftKey || pointer.rightButtonDown())) {
         window.levelData.interactionNodes = window.levelData.interactionNodes.filter(n => n !== node);
-        circle.destroy();
-        this.nodeSprites = this.nodeSprites.filter(s => s !== circle);
+        container.destroy();
+        this.nodeSprites = this.nodeSprites.filter(s => s !== container);
+        if (this.hoveredNodeSprite === container) {
+            this.hoveredNodeSprite = null;
+            this.hoveredNodeData = null;
+        }
         this.saveState();
       }
     });
     
-    this.nodeSprites.push(circle);
-    return circle;
+    this.nodeSprites.push(container);
+    return container;
   }
 
   drawNodesOverlay() {
@@ -571,14 +737,14 @@ export class OfficeScene extends Phaser.Scene {
     // Actualizar agentes
     this.agents.forEach(a => a.update());
 
-    // Movimiento libre de cámara en modo editor
-    if (this.mode !== 'PLAY') {
-      const camSpeed = 10 / this.cameras.main.zoom;
-      if (this.editorKeys.W.isDown || this.cursors.up.isDown) this.cameras.main.scrollY -= camSpeed;
-      if (this.editorKeys.S.isDown || this.cursors.down.isDown) this.cameras.main.scrollY += camSpeed;
-      if (this.editorKeys.A.isDown || this.cursors.left.isDown) this.cameras.main.scrollX -= camSpeed;
-      if (this.editorKeys.D.isDown || this.cursors.right.isDown) this.cameras.main.scrollX += camSpeed;
-    }
+    this.checkInactivityRealtime();
+
+    // Movimiento libre de cámara
+    const camSpeed = 10 / this.cameras.main.zoom;
+    if (this.editorKeys.W.isDown || this.cursors.up.isDown) this.cameras.main.scrollY -= camSpeed;
+    if (this.editorKeys.S.isDown || this.cursors.down.isDown) this.cameras.main.scrollY += camSpeed;
+    if (this.editorKeys.A.isDown || this.cursors.left.isDown) this.cameras.main.scrollX -= camSpeed;
+    if (this.editorKeys.D.isDown || this.cursors.right.isDown) this.cameras.main.scrollX += camSpeed;
   }
 
   // ==========================================
@@ -599,41 +765,8 @@ export class OfficeScene extends Phaser.Scene {
         this.navGrid.push(row);
       }
 
-      const addObstacle = (col, row, width, height) => {
-        for (let r = row; r < row + height; r++) {
-          for (let c = col; c < col + width; c++) {
-            if (this.navGrid[r] && this.navGrid[r][c] !== undefined) {
-               this.navGrid[r][c] = 1; // 1 = Obstáculo
-            }
-          }
-        }
-      };
-
-      // Obstáculos base predeterminados si no había JSON
-      addObstacle(1, 1, 4, 2);
-      addObstacle(1, 3, 1, 2);
-      addObstacle(18, 0, 1, 6);
-      addObstacle(18, 9, 1, 7);
-
-      const islandPositions = [
-        { col: 7, row: 3 }, { col: 13, row: 3 },
-        { col: 7, row: 10 }, { col: 13, row: 10 }
-      ];
-      islandPositions.forEach(pos => {
-        addObstacle(pos.col, pos.row, 3, 2);
-      });
-
-      addObstacle(23, 1, 4, 1);
-      addObstacle(21, 4, 4, 1);
-      addObstacle(24, 5, 1, 2);
-      addObstacle(21, 8, 3, 1);
-      addObstacle(25, 7, 1, 1);
-      addObstacle(26, 9, 1, 1);
-      addObstacle(21, 6, 1, 1);
-      addObstacle(23, 6, 1, 1);
-      addObstacle(24, 9, 1, 1);
-      addObstacle(26, 13, 1, 3);
-      addObstacle(22, 13, 2, 2);
+      // Sin obstáculos por defecto, todo es caminable inicialmente
+      // o se carga desde el JSON
       
       // Guardarlo por defecto
       window.levelData.collisionMap = JSON.parse(JSON.stringify(this.navGrid));
@@ -644,6 +777,23 @@ export class OfficeScene extends Phaser.Scene {
     this.finder.setAcceptableTiles([0]);
     this.finder.enableDiagonals();
     this.finder.disableCornerCutting();
+  }
+
+  getWalkableAdjacent(col, row) {
+    // Si ya es caminable, retornar
+    if (this.navGrid[row] && this.navGrid[row][col] === 0) {
+      return {col, row};
+    }
+    // Buscar en direcciones adyacentes (ortogonales primero)
+    const dirs = [[0,1], [0,-1], [1,0], [-1,0], [1,1], [1,-1], [-1,1], [-1,-1]];
+    for (const d of dirs) {
+      const nc = col + d[0];
+      const nr = row + d[1];
+      if (this.navGrid[nr] && this.navGrid[nr][nc] === 0) {
+        return {col: nc, row: nr};
+      }
+    }
+    return {col, row}; // Fallback si todo está bloqueado
   }
 
   getRandomDesk(role) {
@@ -694,11 +844,15 @@ export class OfficeScene extends Phaser.Scene {
   // Piso, Texturas y Efectos Base
   // ==========================================
   createFloorPattern() {
+    const isDay = localStorage.getItem('office_theme') === 'day';
+    const officeTexture = isDay ? 'floor_tile_day' : 'floor_tile';
+    const loungeTexture = isDay ? 'lounge_tile_day' : 'lounge_tile';
+
     // 1. Textura en mosaico para la Oficina (0 a 18 columnas)
-    this.add.tileSprite(0, 0, 18 * GRID_SIZE, ROWS * GRID_SIZE, 'floor_tile').setOrigin(0, 0);
+    this.officeFloor = this.add.tileSprite(0, 0, 18 * GRID_SIZE, ROWS * GRID_SIZE, officeTexture).setOrigin(0, 0).setDepth(-5);
     
     // 2. Textura en mosaico para el Lounge (18 a 27 columnas)
-    this.add.tileSprite(18 * GRID_SIZE, 0, 9 * GRID_SIZE, ROWS * GRID_SIZE, 'lounge_tile').setOrigin(0, 0);
+    this.loungeFloor = this.add.tileSprite(18 * GRID_SIZE, 0, 9 * GRID_SIZE, ROWS * GRID_SIZE, loungeTexture).setOrigin(0, 0).setDepth(-5);
   }
 
   // ==========================================
@@ -715,60 +869,6 @@ export class OfficeScene extends Phaser.Scene {
     }
     
     this.layoutGraphics = this.add.graphics();
-
-    // Sombra del Muro Divisorio Central
-    this.layoutGraphics.fillStyle(0x000000, 0.5);
-    this.layoutGraphics.fillRect(18 * GRID_SIZE + 6, 6, 1 * GRID_SIZE, 6 * GRID_SIZE);
-    this.layoutGraphics.fillRect(18 * GRID_SIZE + 6, 9 * GRID_SIZE + 6, 1 * GRID_SIZE, 7 * GRID_SIZE);
-
-    // --- A. Oficina del Team Leader (Arriba Izquierda) ---
-    // Suelo tintado
-    this.layoutGraphics.fillStyle(0x0284c7, 0.08); 
-    this.layoutGraphics.fillRect(0, 0, 6 * GRID_SIZE, 7 * GRID_SIZE);
-    
-    // Paredes de "vidrio" simuladas con borde brillante cian
-    this.layoutGraphics.lineStyle(2, 0x22d3ee, 0.5); 
-    this.layoutGraphics.strokeRect(0, 0, 6 * GRID_SIZE, 7 * GRID_SIZE);
-    
-    // Mesa visitas TL
-    this.layoutGraphics.fillStyle(0x334155, 1);
-    this.layoutGraphics.fillCircle(4.5 * GRID_SIZE, 5 * GRID_SIZE, 12);
-
-    // --- B. Muro Divisorio Central-Derecho ---
-    this.layoutGraphics.fillStyle(0x0f172a, 1); // Color slate muro oscuro
-    this.layoutGraphics.fillRect(18 * GRID_SIZE, 0, 1 * GRID_SIZE, 6 * GRID_SIZE);
-    this.layoutGraphics.fillRect(18 * GRID_SIZE, 9 * GRID_SIZE, 1 * GRID_SIZE, 7 * GRID_SIZE);
-
-    // Sombras proyectadas para las islas de trabajo
-    const islandPositions = [
-      { col: 7, row: 3 },  { col: 13, row: 3 },
-      { col: 7, row: 10 }, { col: 13, row: 10 }
-    ];
-    islandPositions.forEach(pos => {
-      const pxX = pos.col * GRID_SIZE;
-      const pxY = pos.row * GRID_SIZE;
-      const deskShadow = this.add.graphics();
-      deskShadow.fillStyle(0x000000, 0.35);
-      deskShadow.fillRoundedRect(pxX + 2, pxY + 2, 3.2 * GRID_SIZE, 2.4 * GRID_SIZE, 6);
-      this.shadowsGroup.add(deskShadow);
-    });
-
-    // Sombra suave para el Sofá U
-    const sofaShadow = this.add.graphics();
-    sofaShadow.fillStyle(0x000000, 0.35);
-    sofaShadow.fillRoundedRect(21 * GRID_SIZE + 4, 4.2 * GRID_SIZE + 4, 4.5 * GRID_SIZE, 3 * GRID_SIZE, 8);
-    this.shadowsGroup.add(sofaShadow);
-
-    // Mesita de centro para las butacas
-    this.layoutGraphics.fillStyle(0x334155, 1); 
-    this.layoutGraphics.fillCircle(24.2 * GRID_SIZE, 9.2 * GRID_SIZE, 10);
-    
-    // Glow de la TV
-    const tvGlow = this.add.graphics();
-    tvGlow.fillStyle(0x38bdf8, 0.2);
-    tvGlow.fillCircle(24.5 * GRID_SIZE, 13 * GRID_SIZE, 50);
-    tvGlow.setBlendMode(Phaser.BlendModes.ADD);
-    this.shadowsGroup.add(tvGlow);
 
     // ---------------------------------------------------------
     // Instanciar Props desde defaultLayout.json
@@ -795,45 +895,55 @@ export class OfficeScene extends Phaser.Scene {
     
     sprite.setDisplaySize(propData.width, propData.height);
     sprite.angle = propData.rotation || 0;
-    sprite.setDepth(propData.y);
+    
+    const isStructure = structureKeys.has(propData.type);
+    const depth = isStructure ? (propData.type.includes('floor') ? -4 : -2) : propData.y;
+    sprite.setDepth(depth);
+    
     sprite.setData('propId', propData.id);
     sprite.setData('propType', propData.type);
     
-    // Hacer prop interactivo en modo EDIT_LAYOUT
-    sprite.setInteractive({ useHandCursor: true, draggable: true });
-    
-    sprite.on('dragstart', () => {
-      if (this.mode === 'EDIT_LAYOUT') this.isDraggingObject = true;
-    });
-
-    sprite.on('drag', (pointer, dragX, dragY) => {
-      if (this.mode !== 'EDIT_LAYOUT') return;
-      let snappedX = dragX;
-      let snappedY = dragY;
-      if (!pointer.event.altKey) {
-        snappedX = Math.floor(dragX / GRID_SIZE) * GRID_SIZE;
-        snappedY = Math.floor(dragY / GRID_SIZE) * GRID_SIZE;
-        if (propData.type === 'prop_bar_stool') {
-          snappedX += GRID_SIZE / 2;
-          snappedY += GRID_SIZE / 2;
+    // Hacer prop interactivo (solo props de objetos se arrastran; estructura se pinta con pincel)
+    if (!isStructure) {
+      sprite.setInteractive({ useHandCursor: true, draggable: true });
+      
+      sprite.on('dragstart', () => {
+        if (this.mode === 'EDIT_LAYOUT') {
+          this.isDraggingObject = true;
         }
-      }
-      sprite.setPosition(snappedX, snappedY);
-      sprite.setDepth(snappedY); // Actualizar Y-Sorting
-    });
-    
-    sprite.on('dragend', () => {
-      this.isDraggingObject = false;
-      if (this.mode !== 'EDIT_LAYOUT') return;
-      if (propData.x !== sprite.x || propData.y !== sprite.y) {
-        propData.x = sprite.x;
-        propData.y = sprite.y;
-        this.saveState();
-      }
-    });
+      });
+
+      sprite.on('drag', (pointer, dragX, dragY) => {
+        if (this.mode !== 'EDIT_LAYOUT') return;
+        let snappedX = dragX;
+        let snappedY = dragY;
+        if (!pointer.event.altKey) {
+          snappedX = Math.floor(dragX / GRID_SIZE) * GRID_SIZE;
+          snappedY = Math.floor(dragY / GRID_SIZE) * GRID_SIZE;
+          if (propData.type === 'prop_bar_stool') {
+            snappedX += GRID_SIZE / 2;
+            snappedY += GRID_SIZE / 2;
+          }
+        }
+        sprite.setPosition(snappedX, snappedY);
+        sprite.setDepth(snappedY); // Actualizar Y-Sorting
+      });
+      
+      sprite.on('dragend', () => {
+        if (this.mode !== 'EDIT_LAYOUT') return;
+        this.isDraggingObject = false;
+        if (propData.x !== sprite.x || propData.y !== sprite.y) {
+          propData.x = sprite.x;
+          propData.y = sprite.y;
+          this.saveState();
+        }
+      });
+    } else {
+      sprite.setInteractive({ useHandCursor: true, draggable: false });
+    }
     
     sprite.on('pointerdown', (pointer) => {
-      if (this.mode === 'EDIT_LAYOUT' && pointer.event.shiftKey) {
+      if (((this.mode === 'EDIT_LAYOUT' && !isStructure) || (this.mode === 'EDIT_STRUCTURE' && isStructure)) && pointer.event.shiftKey) {
         window.levelData.props = window.levelData.props.filter(p => p.id !== propData.id);
         sprite.destroy();
         this.propSprites = this.propSprites.filter(s => s !== sprite);
@@ -842,7 +952,9 @@ export class OfficeScene extends Phaser.Scene {
     });
 
     sprite.on('pointerover', () => {
-      if (this.mode === 'EDIT_LAYOUT') this.hoveredProp = sprite;
+      if ((this.mode === 'EDIT_LAYOUT' && !isStructure) || (this.mode === 'EDIT_STRUCTURE' && isStructure)) {
+        this.hoveredProp = sprite;
+      }
     });
 
     sprite.on('pointerout', () => {
@@ -854,24 +966,15 @@ export class OfficeScene extends Phaser.Scene {
   }
 
   createElevator() {
-    const pxX = this.doorGridPos.col * GRID_SIZE + (GRID_SIZE/2);
-    const pxY = this.doorGridPos.row * GRID_SIZE + (GRID_SIZE/2);
-    
-    // Zona de elevador sin pared frontal
-    const elevatorRect = this.add.rectangle(pxX, pxY, GRID_SIZE*2, GRID_SIZE, 0x10b981, 0.2);
-    elevatorRect.setStrokeStyle(2, 0x10b981);
-    // Para asegurar que el elevador quede en el piso
-    elevatorRect.setDepth(0);
-    
-    this.add.text(pxX, pxY, 'ELEVADOR', {
-      fontSize: '10px', fill: '#10b981', fontFamily: 'monospace', fontStyle: 'bold'
-    }).setOrigin(0.5).setDepth(1);
+    // La lógica del elevador (punto de spawn/despawn) se mantiene en this.doorGridPos,
+    // pero se elimina su representación visual hardcodeada para que la escena
+    // contenga únicamente el piso y los objetos añadidos manualmente.
   }
 
   // ==========================================
   // Herramientas del Modo Editor
   // ==========================================
-  placeNewProp(propType, x, y, width, height) {
+  placeNewProp(propType, x, y, width, height, rotation = 0) {
     const newId = 'prop_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
     
     const propData = {
@@ -881,14 +984,71 @@ export class OfficeScene extends Phaser.Scene {
       y: y,
       width: width,
       height: height,
-      rotation: 0
+      rotation: rotation
     };
     
     window.levelData.props.push(propData);
     this.createPropSprite(propData);
     
     this.saveState();
-    console.log(`[Editor] Colocado nuevo prop: ${propType} en (${x}, ${y})`);
+  }
+
+  paintStructure(pointer) {
+    if (!this.activeStructureBrush) return;
+    const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+    const snappedX = Math.floor(worldPoint.x / GRID_SIZE) * GRID_SIZE;
+    const snappedY = Math.floor(worldPoint.y / GRID_SIZE) * GRID_SIZE;
+
+    // Verificar límites del mapa
+    if (snappedX < 0 || snappedX >= COLS * GRID_SIZE || snappedY < 0 || snappedY >= ROWS * GRID_SIZE) {
+      return;
+    }
+
+    const brushType = this.activeStructureBrush.id;
+    const rot = this.structureBrushRotation || 0;
+
+    // Verificar si ya existe una estructura en esa celda exacta
+    const existingIndex = window.levelData.props.findIndex(p => 
+      p.x === snappedX && p.y === snappedY && (p.type.includes('floor') || p.type.includes('wall'))
+    );
+
+    if (existingIndex !== -1) {
+      const existing = window.levelData.props[existingIndex];
+      // Si ya está el mismo bloque idéntico con la misma rotación, no duplicar
+      if (existing.type === brushType && existing.width === 32 && existing.height === 32 && (existing.rotation || 0) === rot) {
+        return;
+      }
+      // Si es otro bloque (ej. cambiar alfombra por madera o pared), reemplazarlo
+      const oldSprite = this.propSprites.find(s => s.getData('propId') === existing.id);
+      if (oldSprite) {
+        oldSprite.destroy();
+        this.propSprites = this.propSprites.filter(s => s !== oldSprite);
+      }
+      window.levelData.props.splice(existingIndex, 1);
+    }
+
+    this.placeNewProp(brushType, snappedX, snappedY, 32, 32, rot);
+  }
+
+  eraseStructureAt(pointer) {
+    const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+    const snappedX = Math.floor(worldPoint.x / GRID_SIZE) * GRID_SIZE;
+    const snappedY = Math.floor(worldPoint.y / GRID_SIZE) * GRID_SIZE;
+
+    const existingIndex = window.levelData.props.findIndex(p => 
+      p.x === snappedX && p.y === snappedY && (p.type.includes('floor') || p.type.includes('wall'))
+    );
+
+    if (existingIndex !== -1) {
+      const existing = window.levelData.props[existingIndex];
+      const oldSprite = this.propSprites.find(s => s.getData('propId') === existing.id);
+      if (oldSprite) {
+        oldSprite.destroy();
+        this.propSprites = this.propSprites.filter(s => s !== oldSprite);
+      }
+      window.levelData.props.splice(existingIndex, 1);
+      this.saveState();
+    }
   }
 
   // ==========================================
@@ -909,9 +1069,12 @@ export class OfficeScene extends Phaser.Scene {
   }
 
   handleTelemetryEvent(event, isJumpReplay = false) {
-    const { agentId, agentRole, state, timestamp } = event;
+    let { agentId, agentRole, state, timestamp } = event;
     if (!agentId) return;
     
+    // Convertir el rol raw del log (ej. "ingeniero de datos") a un rol estándar (ej. "dba")
+    agentRole = mapRawRoleToKey(agentRole);
+
     let eventTime = null;
     if (timestamp) {
       eventTime = new Date(timestamp).getTime();
@@ -925,11 +1088,23 @@ export class OfficeScene extends Phaser.Scene {
 
     let avatar = this.agents.get(agentId);
 
+    const logMsg = event.metadata?.detailMessage 
+      || event.metadata?.rawContentSnippet 
+      || (event.metadata?.toolInUse ? `Herramienta: ${event.metadata.toolInUse}` : null)
+      || `Estado: ${state}`;
+
     if (!avatar) {
       const startPx = this.gridToPx(this.doorGridPos.col, this.doorGridPos.row);
       avatar = new Avatar(this, startPx.x, startPx.y, agentId, agentRole);
       avatar.lastSimActivity = eventTime || this.currentSimTime || Date.now();
+      avatar.lastLogMessage = logMsg;
+      avatar.lastLogTime = eventTime || this.currentSimTime || Date.now();
+      if (event.agentName) avatar.agentName = event.agentName;
       this.agents.set(agentId, avatar);
+    } else {
+      avatar.lastLogMessage = logMsg;
+      avatar.lastLogTime = eventTime || this.currentSimTime || Date.now();
+      if (event.agentName) avatar.agentName = event.agentName;
     }
 
     if (avatar && avatar.active) {
@@ -944,13 +1119,10 @@ export class OfficeScene extends Phaser.Scene {
   checkInactivityLifecycle() {
     if (!this.currentSimTime) return;
     
-    const REST_THRESHOLD = 120000; // 2 minutos sin logs = descansar (ej. esperando respuesta larga)
-    const DESPAWN_THRESHOLD = 600000; // 10 minutos sin logs = irse de la oficina
+    const REST_THRESHOLD = 300000; // 5 minutos sim-time para descansar
+    const DESPAWN_THRESHOLD = 1800000; // 30 minutos sin logs = irse de la oficina
     
     for (const [id, avatar] of this.agents.entries()) {
-      // El Team Leader (orquestador) siempre está activo, nunca descansa ni hace despawn
-      if (avatar.agentRole === 'team_leader') continue;
-
       const inactiveTime = this.currentSimTime - avatar.lastSimActivity;
       
       if (inactiveTime > DESPAWN_THRESHOLD) {
@@ -964,7 +1136,33 @@ export class OfficeScene extends Phaser.Scene {
       } else if (inactiveTime > REST_THRESHOLD) {
         if (!avatar.isDespawning && avatar.fsm.state !== 'RESTING') {
           // Forzar descanso
-          avatar.handleTelemetryState('RESTING', avatar.lastSimActivity);
+          avatar.handleTelemetryState('RESTING', avatar.lastSimActivity, true);
+        }
+      }
+    }
+  }
+
+  checkInactivityRealtime() {
+    const REALTIME_REST_THRESHOLD = 300000; // 5 minutos en tiempo real sin logs
+    const REALTIME_DESPAWN_THRESHOLD = 1800000; // 30 minutos en tiempo real sin logs
+    const now = Date.now();
+
+    for (const [id, avatar] of this.agents.entries()) {
+      if (avatar.lastRealActivity) {
+        const inactiveTime = now - avatar.lastRealActivity;
+        
+        if (inactiveTime > REALTIME_DESPAWN_THRESHOLD) {
+          if (!avatar.isDespawning) {
+            avatar.isDespawning = true;
+            const doorPx = this.gridToPx(this.doorGridPos.col, this.doorGridPos.row);
+            avatar.despawn(doorPx, () => {
+              this.agents.delete(id);
+            });
+          }
+        } else if (inactiveTime > REALTIME_REST_THRESHOLD) {
+          if (!avatar.isDespawning && avatar.fsm.state !== 'RESTING') {
+            avatar.handleTelemetryState('RESTING', avatar.lastSimActivity, true);
+          }
         }
       }
     }
