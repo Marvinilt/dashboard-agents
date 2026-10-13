@@ -1101,6 +1101,11 @@ export class OfficeScene extends Phaser.Scene {
       avatar.lastLogTime = eventTime || this.currentSimTime || Date.now();
       if (event.agentName) avatar.agentName = event.agentName;
       this.agents.set(agentId, avatar);
+
+      if (isJumpReplay && avatar.assignedDesk) {
+        const deskPx = this.gridToPx(avatar.assignedDesk.col, avatar.assignedDesk.row);
+        avatar.setPosition(deskPx.x, deskPx.y);
+      }
     } else {
       avatar.lastLogMessage = logMsg;
       avatar.lastLogTime = eventTime || this.currentSimTime || Date.now();

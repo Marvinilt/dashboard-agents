@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.1] - 2026-10-13
+
+### Fixed
+- **Corrección en spawn y desplazamiento inicial de avatares:**
+  - Se eliminó la interrupción del tween de aparición (`SpawningState`) que forzaba a los avatares a entrar en `IDLE` en el punto de inicio (elevador) y cancelaba la ruta de caminata.
+  - Asignación inmediata de la estación de trabajo y ejecución directa de navegación (`goToWorkstation`) al instanciarse el avatar.
+  - Preservación de la postura de pie en movimiento (`applyStandingFrame`), impidiendo que tomen prematuramente la pose de escritorio frontal sin piernas en el elevador.
+  - Transición garantizada a la pose de trabajo (`applySeatedFrame` con `avatares_working`) al llegar físicamente al escritorio asignado.
+  - Posicionamiento inmediato de los avatares en sus escritorios durante saltos de simulación (`isJumpReplay`) en `OfficeScene.js`.
+
 ## [1.5.0] - 2026-10-11
 
 ### Added

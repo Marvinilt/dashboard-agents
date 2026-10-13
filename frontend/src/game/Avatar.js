@@ -100,20 +100,39 @@ class State {
 }
 
 class SpawningState extends State {
-    enter(avatar) {
-      avatar.statusBubble.setText('');
+  enter(avatar) {
+    avatar.statusBubble.setText('');
     avatar.setScale(0);
     avatar.setAlpha(0);
-    avatar.scene.tweens.add({
+
+    if (avatar.spawnTween) {
+      avatar.spawnTween.stop();
+      avatar.spawnTween = null;
+    }
+
+    avatar.spawnTween = avatar.scene.tweens.add({
       targets: avatar,
       scale: 1,
       alpha: 1,
-      duration: 600,
+      duration: 400,
       ease: 'Back.easeOut',
       onComplete: () => {
-        avatar.fsm.transition('IDLE');
+        avatar.spawnTween = null;
+        if (avatar.fsm && avatar.fsm.state === 'SPAWNING') {
+          avatar.goToWorkstation();
+        }
       }
     });
+
+    // Iniciar de inmediato la caminata a su posición de trabajo respectiva
+    avatar.goToWorkstation();
+  }
+
+  exit(avatar) {
+    if (!avatar.spawnTween) {
+      avatar.setScale(1);
+      avatar.setAlpha(1);
+    }
   }
 }
 
@@ -121,9 +140,9 @@ class IdleState extends State {
   enter(avatar) {
     avatar.statusBubble.setText('');
     
-    // Si está en su escritorio asignado, mantener la pose sentado
+    // Si está en su escritorio asignado, tomar pose sentado
     if (avatar.assignedDesk && avatar.sprite) {
-      avatar.applySeatedFrame(avatar.assignedDesk.direction || 'up', true);
+      avatar.applySeatedFrame(avatar.assignedDesk.direction || 'down', true);
     } else if (avatar.assignedLounge && avatar.sprite) {
       avatar.applySeatedFrame(avatar.assignedLounge.direction || 'up', false);
     } else if (avatar.sprite) {
@@ -182,6 +201,8 @@ class MovingState extends State {
     endPos = avatar.scene.getWalkableAdjacent(endPos.col, endPos.row);
 
     avatar.scene.finder.findPath(startPos.col, startPos.row, endPos.col, endPos.row, (path) => {
+      if (!avatar.active || avatar.fsm?.state !== 'MOVING') return;
+
       if (path === null || path.length === 0) {
         console.warn(`[Pathfinding] No se encontró ruta para ${avatar.agentId}`);
         avatar.fsm.transition('IDLE');
@@ -227,6 +248,7 @@ class MovingState extends State {
       avatar.pathChain = avatar.scene.tweens.chain({
         tweens: tweensParams,
         onComplete: () => {
+          avatar.pathChain = null;
           avatar.fsm.transition('IDLE');
           if (onComplete) onComplete();
         }
@@ -261,7 +283,7 @@ class WorkingState extends State {
     avatar.statusBubble.setText('💭');
     
     if (avatar.assignedDesk && avatar.sprite) {
-      avatar.applySeatedFrame(avatar.assignedDesk.direction || 'up', true);
+      avatar.applySeatedFrame(avatar.assignedDesk.direction || 'down', true);
     } else if (avatar.sprite) {
       avatar.applyStandingFrame(0);
     }
@@ -331,9 +353,11 @@ class ThinkingState extends State {
     avatar.statusBubble.setText('💭');
 
     if (avatar.assignedDesk && avatar.sprite) {
-      avatar.applySeatedFrame(avatar.assignedDesk.direction || 'up', true);
+      avatar.applySeatedFrame(avatar.assignedDesk.direction || 'down', true);
     } else if (avatar.assignedLounge && avatar.sprite) {
       avatar.applySeatedFrame(avatar.assignedLounge.direction || 'up', false);
+    } else if (avatar.sprite) {
+      avatar.applyStandingFrame(0);
     }
     
     // Balanceo reflexivo lento
@@ -394,9 +418,11 @@ class WaitingInputState extends State {
     avatar.statusBubble.setText('⚠️');
 
     if (avatar.assignedDesk && avatar.sprite) {
-      avatar.applySeatedFrame(avatar.assignedDesk.direction || 'up', true);
+      avatar.applySeatedFrame(avatar.assignedDesk.direction || 'down', true);
     } else if (avatar.assignedLounge && avatar.sprite) {
       avatar.applySeatedFrame(avatar.assignedLounge.direction || 'up', false);
+    } else if (avatar.sprite) {
+      avatar.applyStandingFrame(0);
     }
     
     avatar.pulseTween = avatar.scene.tweens.add({
@@ -442,6 +468,8 @@ class RestingState extends State {
       const dir = avatar.assignedLounge.direction || 'up';
       const reclineAngle = dir === 'right' ? -3 : (dir === 'left' ? 3 : 0);
       avatar.sprite.setAngle(reclineAngle);
+    } else if (avatar.sprite) {
+      avatar.applyStandingFrame(0);
     }
 
     avatar.sleepBreathTween = avatar.scene.tweens.add({
@@ -508,7 +536,8 @@ export class Avatar extends Phaser.GameObjects.Container {
     this.agentName = ROLE_LABELS[agentRole] || agentRole;
     this.lastLogMessage = 'Inicializado en oficina';
     this.lastLogTime = Date.now();
-    this.assignedDesk = null;
+    this.assignedDesk = this.scene.getRandomDesk(this.agentRole);
+    this.assignedLounge = null;
     this.lastSimActivity = Date.now();
     this.isHovered = false;
     
@@ -535,7 +564,7 @@ export class Avatar extends Phaser.GameObjects.Container {
     this.on('pointerdown', () => this.scene.events.emit('AGENT_CLICKED', this));
     this.on('pointerover', () => {
       this.isHovered = true;
-      this.setScale(1.1);
+      if (!this.spawnTween) this.setScale(1.1);
       this.emitHoverEvent();
     });
     this.on('pointermove', () => {
@@ -545,7 +574,7 @@ export class Avatar extends Phaser.GameObjects.Container {
     });
     this.on('pointerout', () => {
       this.isHovered = false;
-      this.setScale(1.0);
+      if (!this.spawnTween) this.setScale(1.0);
       this.scene.events.emit('AGENT_HOVER_OUT', { agentId: this.agentId });
     });
 
@@ -661,14 +690,14 @@ export class Avatar extends Phaser.GameObjects.Container {
     this.facingDirection = dx > 0 ? 'right' : (dx < 0 ? 'left' : (dy < 0 ? 'up' : 'down'));
   }
 
-  applySeatedFrame(dir = 'up', isDesk = true) {
+  applySeatedFrame(dir = 'down', isDesk = true) {
     if (!this.sprite) return;
     const normalizedRole = mapRawRoleToKey(this.agentRole);
     const workingFrame = ROLE_TO_WORKING_FRAME[this.agentRole] !== undefined
       ? ROLE_TO_WORKING_FRAME[this.agentRole]
       : ROLE_TO_WORKING_FRAME[normalizedRole];
 
-    if (isDesk && dir === 'down' && workingFrame !== undefined && this.scene.textures.exists('avatares_working')) {
+    if (isDesk && workingFrame !== undefined && this.scene.textures.exists('avatares_working') && dir !== 'left' && dir !== 'right') {
       this.sprite.setTexture('avatares_working', workingFrame);
       this.sprite.setY(-6);
       this.sprite.setScale(AVATAR_SCALE);
@@ -793,6 +822,55 @@ export class Avatar extends Phaser.GameObjects.Container {
     }
   }
 
+  isAtDesk() {
+    if (!this.assignedDesk || !this.scene) return false;
+    const target = this.scene.gridToPx(this.assignedDesk.col, this.assignedDesk.row);
+    return Phaser.Math.Distance.Between(this.x, this.y, target.x, target.y) <= 24;
+  }
+
+  isAtLounge() {
+    if (!this.assignedLounge || !this.scene) return false;
+    const target = this.scene.gridToPx(this.assignedLounge.col, this.assignedLounge.row);
+    return Phaser.Math.Distance.Between(this.x, this.y, target.x, target.y) <= 24;
+  }
+
+  goToWorkstation(onComplete) {
+    if (this.assignedDesk) {
+      const isValid = (window.levelData?.interactionNodes || []).some(
+        n => n.type === 'node_work' && n.col === this.assignedDesk.col && n.row === this.assignedDesk.row
+      );
+      if (!isValid && (window.levelData?.interactionNodes || []).some(n => n.type === 'node_work')) {
+        this.assignedDesk = null;
+      }
+    }
+
+    if (!this.assignedDesk) {
+      this.assignedDesk = this.scene.getRandomDesk(this.agentRole);
+      this.assignedLounge = null;
+    }
+
+    if (!this.assignedDesk) return;
+
+    const target = this.scene.gridToPx(this.assignedDesk.col, this.assignedDesk.row);
+    if (Phaser.Math.Distance.Between(this.x, this.y, target.x, target.y) > 10) {
+      this.fsm.transition('MOVING', target.x, target.y, () => {
+        const nextState = (this.pendingState && this.pendingState !== 'SPAWNING' && this.pendingState !== 'MOVING')
+          ? this.pendingState
+          : 'WORKING';
+        this.pendingState = null;
+        this.fsm.transition(nextState);
+        if (onComplete) onComplete();
+      });
+    } else {
+      const nextState = (this.pendingState && this.pendingState !== 'SPAWNING' && this.pendingState !== 'MOVING')
+        ? this.pendingState
+        : 'WORKING';
+      this.pendingState = null;
+      this.fsm.transition(nextState);
+      if (onComplete) onComplete();
+    }
+  }
+
   // Interfaz pública para cambiar estados desde el Manager
   handleTelemetryState(telemetryState, simTime = null, isAutoRest = false) {
     if (!isAutoRest) {
@@ -809,16 +887,21 @@ export class Avatar extends Phaser.GameObjects.Container {
     else if (tlUpper.includes('THINK') || tlUpper.includes('PLAN')) fsmTargetState = 'THINKING';
     else if (tlUpper.includes('REST') || tlUpper.includes('SLEEP')) fsmTargetState = 'RESTING';
     else if (tlUpper.includes('DONE') || tlUpper.includes('SUCCESS') || tlUpper.includes('IDLE')) fsmTargetState = 'IDLE';
-    else if (['SPAWNING', 'MOVING', 'DESPAWNING'].includes(tlUpper)) fsmTargetState = tlUpper;
-    else fsmTargetState = 'WORKING'; // Default to working for any unknown active log
+    else if (['MOVING', 'DESPAWNING'].includes(tlUpper)) fsmTargetState = tlUpper;
+    else fsmTargetState = 'WORKING';
+
+    // Si aún está en pleno movimiento o apareciendo, guardamos en pendingState y respetamos la ruta
+    if (this.fsm.state === 'MOVING' || this.fsm.state === 'SPAWNING') {
+      return;
+    }
 
     // Mapeo del estado del log al estado interno FSM
     if (fsmTargetState === 'RESTING') {
       if (this.assignedLounge) {
-        const isValid = (window.levelData.interactionNodes || []).some(
+        const isValid = (window.levelData?.interactionNodes || []).some(
           n => n.type === 'node_lounge' && n.col === this.assignedLounge.col && n.row === this.assignedLounge.row
         );
-        if (!isValid && (window.levelData.interactionNodes || []).some(n => n.type === 'node_lounge')) {
+        if (!isValid && (window.levelData?.interactionNodes || []).some(n => n.type === 'node_lounge')) {
            this.assignedLounge = null;
         }
       }
@@ -828,25 +911,23 @@ export class Avatar extends Phaser.GameObjects.Container {
         this.assignedDesk = null; // Clear desk
       }
       
-      if (this.fsm.state !== 'MOVING') {
-        const target = this.scene.gridToPx(this.assignedLounge.col, this.assignedLounge.row);
-        if (Phaser.Math.Distance.Between(this.x, this.y, target.x, target.y) > 10) {
-          this.fsm.transition('MOVING', target.x, target.y, () => {
-            const nextState = this.pendingState || fsmTargetState;
-            this.pendingState = null;
-            this.handleTelemetryState(nextState, this.lastSimActivity);
-          });
-        } else if (this.fsm.state !== fsmTargetState) {
-          this.fsm.transition(fsmTargetState);
-        }
+      const target = this.scene.gridToPx(this.assignedLounge.col, this.assignedLounge.row);
+      if (Phaser.Math.Distance.Between(this.x, this.y, target.x, target.y) > 10) {
+        this.fsm.transition('MOVING', target.x, target.y, () => {
+          const nextState = this.pendingState || fsmTargetState;
+          this.pendingState = null;
+          this.fsm.transition(nextState);
+        });
+      } else if (this.fsm.state !== fsmTargetState) {
+        this.fsm.transition(fsmTargetState);
       }
     } else {
       // Por defecto todos los estados activos van al escritorio
       if (this.assignedDesk) {
-        const isValid = (window.levelData.interactionNodes || []).some(
+        const isValid = (window.levelData?.interactionNodes || []).some(
           n => n.type === 'node_work' && n.col === this.assignedDesk.col && n.row === this.assignedDesk.row
         );
-        if (!isValid && (window.levelData.interactionNodes || []).some(n => n.type === 'node_work')) {
+        if (!isValid && (window.levelData?.interactionNodes || []).some(n => n.type === 'node_work')) {
            this.assignedDesk = null;
         }
       }
@@ -856,20 +937,19 @@ export class Avatar extends Phaser.GameObjects.Container {
         this.assignedLounge = null; // Clear lounge if they go back to work
       }
       
-      // Si no estamos moviéndonos, verificar si estamos en el escritorio
-      if (this.fsm.state !== 'MOVING') {
-        const target = this.scene.gridToPx(this.assignedDesk.col, this.assignedDesk.row);
-        if (Phaser.Math.Distance.Between(this.x, this.y, target.x, target.y) > 10) {
-          // Moverse al escritorio y luego transicionar
-          this.fsm.transition('MOVING', target.x, target.y, () => {
-            const nextState = this.pendingState || fsmTargetState;
-            this.pendingState = null;
-            this.handleTelemetryState(nextState, this.lastSimActivity);
-          });
-        } else if (this.fsm.state !== fsmTargetState) {
-          // Ya está ahí, cambiar estado directamente
-          this.fsm.transition(fsmTargetState);
-        }
+      const target = this.scene.gridToPx(this.assignedDesk.col, this.assignedDesk.row);
+      if (Phaser.Math.Distance.Between(this.x, this.y, target.x, target.y) > 10) {
+        // Moverse al escritorio y luego transicionar
+        this.fsm.transition('MOVING', target.x, target.y, () => {
+          const nextState = (this.pendingState && this.pendingState !== 'SPAWNING' && this.pendingState !== 'MOVING')
+            ? this.pendingState
+            : fsmTargetState;
+          this.pendingState = null;
+          this.fsm.transition(nextState);
+        });
+      } else if (this.fsm.state !== fsmTargetState) {
+        // Ya está ahí, cambiar estado directamente
+        this.fsm.transition(fsmTargetState);
       }
     }
   }
@@ -894,6 +974,10 @@ export class Avatar extends Phaser.GameObjects.Container {
   destroy(fromScene) {
     if (this.isHovered && this.scene && this.scene.events) {
       this.scene.events.emit('AGENT_HOVER_OUT', { agentId: this.agentId });
+    }
+    if (this.spawnTween) {
+      this.spawnTween.stop();
+      this.spawnTween = null;
     }
     this.stopMonitorSparks();
     this.stopFloatingZzz();
