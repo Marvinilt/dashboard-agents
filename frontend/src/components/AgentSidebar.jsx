@@ -208,10 +208,35 @@ export const AgentSidebar = ({ agent, logs = [], agentStats, allAgentStats = {},
                 : '';
               const message = l.metadata?.detailMessage || l.metadata?.rawContentSnippet || 'Paso procesado.';
 
+              // Tooltip enriquecido de hasta 500 caracteres para inspección detallada
+              const meta = l.metadata || {};
+              const extraDetail = meta.toolArgs?.CommandLine
+                ? `Comando: ${meta.toolArgs.CommandLine}`
+                : (meta.toolArgs?.Description || meta.toolArgs?.Instruction)
+                ? [meta.toolArgs.Description, meta.toolArgs.Instruction].filter(Boolean).join(' - ')
+                : meta.toolArgs?.Message
+                ? meta.toolArgs.Message
+                : meta.toolArgs?.TargetFile
+                ? `Archivo: ${meta.toolArgs.TargetFile}`
+                : null;
+
+              let tooltipText = message;
+              if (extraDetail && (!meta.detailMessage || !meta.detailMessage.includes(extraDetail))) {
+                tooltipText = meta.detailMessage ? `${meta.detailMessage}\n${extraDetail}` : extraDetail;
+              } else if (meta.rawContentSnippet && meta.rawContentSnippet.length > (meta.detailMessage?.length || 0)) {
+                tooltipText = meta.rawContentSnippet;
+              }
+
+              tooltipText = tooltipText.replace(/\r\n/g, '\n').trim();
+              if (tooltipText.length > 500) {
+                tooltipText = tooltipText.slice(0, 497) + '...';
+              }
+
               return (
                 <div
                   key={`${agent.agentId}_${l.eventId || index}_${l.stepIndex ?? index}_${index}`}
-                  className="px-2 py-1.5 rounded bg-slate-950/80 border border-slate-800/80 hover:border-slate-700 hover:bg-slate-950 transition-all leading-snug group"
+                  className="px-2 py-1.5 rounded bg-slate-950/80 border border-slate-800/80 hover:border-slate-700 hover:bg-slate-950 transition-all leading-snug group cursor-default"
+                  title={tooltipText}
                 >
                   <div className="flex items-center justify-between text-[10px] text-slate-500 mb-0.5">
                     <span className="text-sky-400 font-bold group-hover:text-sky-300 truncate max-w-[190px]">
@@ -221,7 +246,6 @@ export const AgentSidebar = ({ agent, logs = [], agentStats, allAgentStats = {},
                   </div>
                   <p 
                     className="text-slate-300 break-words text-[10.5px] font-sans leading-tight line-clamp-2"
-                    title={message}
                   >
                     {message}
                   </p>

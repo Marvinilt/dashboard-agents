@@ -16,6 +16,7 @@ export class SimulationEngine {
     this.eventsQueue = [];
     this.currentIndex = 0;
     this.pendingSubagents = [];
+    this.subagentsByUuid = new Map();
   }
 
   setSpeed(speed) {
@@ -38,7 +39,7 @@ export class SimulationEngine {
     const subagentLoadPromises = [];
 
     for await (const line of rl) {
-      const parsed = parseTranscriptLine(line, agentInfo);
+      const parsed = parseTranscriptLine(line, { ...agentInfo, subagentsByUuid: this.subagentsByUuid });
       if (parsed) {
         this.eventsQueue.push(parsed);
 
@@ -89,15 +90,19 @@ export class SimulationEngine {
               agentRole: mappedSubagent.role,
               agentName: mappedSubagent.name
             } : { agentId: uuid, agentRole: 'developer', agentName: 'Desarrollador' };
+
+            if (uuid) {
+              this.subagentsByUuid.set(uuid, subAgentInfo);
+            }
   
             let subagentPath = null;
             if (logUri && logUri.startsWith('file:///')) {
               let uriPath = logUri.replace('file:///', '');
               uriPath = decodeURIComponent(uriPath);
               uriPath = uriPath.split('/').join(path.sep);
-              subagentPath = uriPath;
+              subagentPath = uriPath.replace('transcript_full.jsonl', 'transcript.jsonl');
             } else {
-              subagentPath = path.join(DEFAULT_BRAIN_DIR, uuid, '.system_generated', 'logs', 'transcript_full.jsonl');
+              subagentPath = path.join(DEFAULT_BRAIN_DIR, uuid, '.system_generated', 'logs', 'transcript.jsonl');
             }
             console.log('[Simulator] Cargando subagente:', subAgentInfo, subagentPath);
             subagentLoadPromises.push(this.loadTranscript(subagentPath, subAgentInfo));
@@ -116,8 +121,9 @@ export class SimulationEngine {
     this.eventsQueue = [];
     this.currentIndex = 0;
     this.pendingSubagents = [];
+    this.subagentsByUuid = new Map();
 
-    const mainTranscript = path.join(sessionPath, '.system_generated', 'logs', 'transcript_full.jsonl');
+    const mainTranscript = path.join(sessionPath, '.system_generated', 'logs', 'transcript.jsonl');
     
     console.log(`[Simulator] Iniciando carga de sesión y subagentes para "${sessionId}"...`);
     

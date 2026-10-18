@@ -87,6 +87,9 @@ class StateMachine {
     this.possibleStates[this.state].exit(...this.stateArgs);
     this.state = newState;
     this.possibleStates[this.state].enter(...this.stateArgs, ...enterArgs);
+    if (this.stateArgs[0]?.isHovered) {
+      this.stateArgs[0].emitHoverEvent();
+    }
   }
 }
 
@@ -138,11 +141,11 @@ class SpawningState extends State {
 
 class IdleState extends State {
   enter(avatar) {
-    avatar.statusBubble.setText('');
+    avatar.updateInactivityBubble();
     
-    // Si está en su escritorio asignado, tomar pose sentado
+    // Si está en su escritorio asignado, tomar pose sentado según la dirección configurada
     if (avatar.assignedDesk && avatar.sprite) {
-      avatar.applySeatedFrame(avatar.assignedDesk.direction || 'down', true);
+      avatar.applySeatedFrame(avatar.assignedDesk.direction || 'up', true);
     } else if (avatar.assignedLounge && avatar.sprite) {
       avatar.applySeatedFrame(avatar.assignedLounge.direction || 'up', false);
     } else if (avatar.sprite) {
@@ -170,7 +173,12 @@ class IdleState extends State {
 
 class MovingState extends State {
   enter(avatar, targetX, targetY, onComplete) {
-    avatar.statusBubble.setText('');
+    const { minutesWaiting } = avatar.getInactivityMetrics ? avatar.getInactivityMetrics() : { minutesWaiting: 0 };
+    if (minutesWaiting >= 5) {
+      avatar.updateInactivityBubble();
+    } else {
+      avatar.statusBubble.setText('');
+    }
     avatar.stopBreathingAnimation();
 
     if (avatar.sprite) {
@@ -280,10 +288,10 @@ class MovingState extends State {
 
 class WorkingState extends State {
   enter(avatar) {
-    avatar.statusBubble.setText('💭');
+    avatar.updateInactivityBubble();
     
     if (avatar.assignedDesk && avatar.sprite) {
-      avatar.applySeatedFrame(avatar.assignedDesk.direction || 'down', true);
+      avatar.applySeatedFrame(avatar.assignedDesk.direction || 'up', true);
     } else if (avatar.sprite) {
       avatar.applyStandingFrame(0);
     }
@@ -312,7 +320,7 @@ class WorkingState extends State {
     // 2. Globo flotante suave
     avatar.bubbleFloatTween = avatar.scene.tweens.add({
       targets: avatar.statusBubble,
-      y: { from: -60, to: -64 },
+      y: { from: -62, to: -66 },
       duration: 800,
       yoyo: true,
       repeat: -1,
@@ -335,7 +343,7 @@ class WorkingState extends State {
     if (avatar.bubbleFloatTween) {
       avatar.bubbleFloatTween.stop();
       avatar.bubbleFloatTween = null;
-      avatar.statusBubble.setY(-60);
+      avatar.statusBubble.setY(-62);
     }
     avatar.stopMonitorSparks();
 
@@ -350,10 +358,10 @@ class WorkingState extends State {
 
 class ThinkingState extends State {
   enter(avatar) {
-    avatar.statusBubble.setText('💭');
+    avatar.updateInactivityBubble();
 
     if (avatar.assignedDesk && avatar.sprite) {
-      avatar.applySeatedFrame(avatar.assignedDesk.direction || 'down', true);
+      avatar.applySeatedFrame(avatar.assignedDesk.direction || 'up', true);
     } else if (avatar.assignedLounge && avatar.sprite) {
       avatar.applySeatedFrame(avatar.assignedLounge.direction || 'up', false);
     } else if (avatar.sprite) {
@@ -381,15 +389,18 @@ class ThinkingState extends State {
       ease: 'Sine.easeInOut'
     });
 
-    // Globo de pensamiento pulsante suave
-    avatar.thinkBubbleTween = avatar.scene.tweens.add({
-      targets: avatar.statusBubble,
-      scale: { from: 0.95, to: 1.2 },
-      duration: 750,
-      yoyo: true,
-      repeat: -1,
-      ease: 'Sine.easeInOut'
-    });
+    // Globo de pensamiento pulsante suave (solo si aún no está en espera)
+    const { minutesWaiting } = avatar.getInactivityMetrics ? avatar.getInactivityMetrics() : { minutesWaiting: 0 };
+    if (minutesWaiting < 1) {
+      avatar.thinkBubbleTween = avatar.scene.tweens.add({
+        targets: avatar.statusBubble,
+        scale: { from: 0.95, to: 1.2 },
+        duration: 750,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut'
+      });
+    }
   }
 
   exit(avatar) {
@@ -415,23 +426,26 @@ class ThinkingState extends State {
 
 class WaitingInputState extends State {
   enter(avatar) {
-    avatar.statusBubble.setText('⚠️');
+    avatar.updateInactivityBubble();
 
     if (avatar.assignedDesk && avatar.sprite) {
-      avatar.applySeatedFrame(avatar.assignedDesk.direction || 'down', true);
+      avatar.applySeatedFrame(avatar.assignedDesk.direction || 'up', true);
     } else if (avatar.assignedLounge && avatar.sprite) {
       avatar.applySeatedFrame(avatar.assignedLounge.direction || 'up', false);
     } else if (avatar.sprite) {
       avatar.applyStandingFrame(0);
     }
     
-    avatar.pulseTween = avatar.scene.tweens.add({
-      targets: avatar.statusBubble,
-      scale: 1.35,
-      duration: 280,
-      yoyo: true,
-      repeat: -1
-    });
+    const { minutesWaiting } = avatar.getInactivityMetrics ? avatar.getInactivityMetrics() : { minutesWaiting: 0 };
+    if (minutesWaiting < 1) {
+      avatar.pulseTween = avatar.scene.tweens.add({
+        targets: avatar.statusBubble,
+        scale: 1.35,
+        duration: 280,
+        yoyo: true,
+        repeat: -1
+      });
+    }
 
     avatar.impatientSwayTween = avatar.scene.tweens.add({
       targets: avatar.sprite,
@@ -459,7 +473,7 @@ class WaitingInputState extends State {
 
 class RestingState extends State {
   enter(avatar) {
-    avatar.statusBubble.setText('');
+    avatar.updateInactivityBubble();
     avatar.setAlpha(0.9);
     
     if (avatar.sprite && avatar.assignedLounge) {
@@ -534,11 +548,13 @@ export class Avatar extends Phaser.GameObjects.Container {
     this.agentId = agentId;
     this.agentRole = agentRole;
     this.agentName = ROLE_LABELS[agentRole] || agentRole;
+    this.startTime = this.scene?.currentSimTime || Date.now();
     this.lastLogMessage = 'Inicializado en oficina';
-    this.lastLogTime = Date.now();
+    this.lastLogTime = this.startTime;
     this.assignedDesk = this.scene.getRandomDesk(this.agentRole);
     this.assignedLounge = null;
-    this.lastSimActivity = Date.now();
+    this.lastSimActivity = this.startTime;
+    this.lastRealActivity = Date.now();
     this.isHovered = false;
     
     // Componentes visuales
@@ -558,19 +574,15 @@ export class Avatar extends Phaser.GameObjects.Container {
 
     this.fsm.step(); // Ejecutar primer estado
 
-    // Interactividad
-    this.setSize(40, 56);
-    this.setInteractive(new Phaser.Geom.Rectangle(-20, -28, 40, 56), Phaser.Geom.Rectangle.Contains);
+    // Interactividad: Centrado exacto sobre el cuerpo del avatar (width 48, height 64 centrado en 0, -16)
+    this.setSize(48, 64);
+    this.setInteractive(new Phaser.Geom.Rectangle(0, -16, 48, 64), Phaser.Geom.Rectangle.Contains);
+    if (this.input) this.input.cursor = 'pointer';
     this.on('pointerdown', () => this.scene.events.emit('AGENT_CLICKED', this));
     this.on('pointerover', () => {
       this.isHovered = true;
       if (!this.spawnTween) this.setScale(1.1);
       this.emitHoverEvent();
-    });
-    this.on('pointermove', () => {
-      if (this.isHovered) {
-        this.emitHoverEvent();
-      }
     });
     this.on('pointerout', () => {
       this.isHovered = false;
@@ -582,11 +594,139 @@ export class Avatar extends Phaser.GameObjects.Container {
     scene.add.existing(this);
   }
 
+  getInactivityMetrics() {
+    const currentTime = this.scene.currentSimTime || Date.now();
+    const effectiveLastLogTime = this.lastLogTime || this.lastSimActivity || currentTime;
+
+    const simDiff = (this.scene.currentSimTime && this.lastSimActivity)
+      ? Math.max(0, this.scene.currentSimTime - this.lastSimActivity)
+      : 0;
+    const realDiff = this.lastRealActivity
+      ? Math.max(0, Date.now() - this.lastRealActivity)
+      : (this.lastLogTime ? Math.max(0, Date.now() - this.lastLogTime) : 0);
+
+    const diffMs = Math.max(simDiff, realDiff, Math.max(0, currentTime - effectiveLastLogTime));
+    const minutesWaiting = Math.floor(diffMs / 60000);
+
+    return {
+      currentTime,
+      effectiveLastLogTime,
+      diffMs,
+      minutesWaiting
+    };
+  }
+
+  updateInactivityBubble() {
+    if (!this.active || !this.scene || !this.statusBubble) return;
+
+    if (this.isDespawning || this.fsm?.state === 'SPAWNING' || this.fsm?.state === 'DESPAWNING') {
+      if (this.statusBubble.text !== '') {
+        this.statusBubble.setText('');
+      }
+      return;
+    }
+
+    const { minutesWaiting } = this.getInactivityMetrics();
+
+    // Caso 1: Menos de 1 minuto sin logs -> Estado activo normal
+    if (minutesWaiting < 1) {
+      if (this.fsm?.state === 'MOVING') {
+        if (this.statusBubble.text !== '') {
+          this.statusBubble.setText('');
+        }
+        return;
+      }
+
+      if (this.fsm?.state === 'WAITING_INPUT') {
+        if (this.statusBubble.text !== '⚠️') {
+          this.statusBubble.setStyle({
+            fontSize: '16px',
+            backgroundColor: null,
+            strokeThickness: 0,
+            shadow: null,
+            padding: { x: 0, y: 0 },
+            resolution: 3
+          });
+          this.statusBubble.setText('⚠️');
+          this.statusBubble.setScale(1);
+
+          if (this.isHovered) {
+            this.emitHoverEvent();
+          }
+        }
+        return;
+      }
+
+      // En la estación de trabajo (WORKING, THINKING, IDLE sentado): icono de pensando 💭
+      if (this.statusBubble.text !== '💭') {
+        this.statusBubble.setStyle({
+          fontSize: '16px',
+          backgroundColor: null,
+          strokeThickness: 0,
+          shadow: null,
+          padding: { x: 0, y: 0 },
+          resolution: 3
+        });
+        this.statusBubble.setText('💭');
+        this.statusBubble.setScale(1);
+
+        if (this.isHovered) {
+          this.emitHoverEvent();
+        }
+      }
+      return;
+    }
+
+    // Caso 2 & 3: A partir de 1 minuto de inactividad -> EN ESPERA
+    // Detener tweens de escala en texto para mantenerlo nítido y legible
+    if (this.thinkBubbleTween) {
+      this.thinkBubbleTween.stop();
+      this.thinkBubbleTween = null;
+    }
+    if (this.pulseTween) {
+      this.pulseTween.stop();
+      this.pulseTween = null;
+    }
+
+    const isResting = this.fsm?.state === 'RESTING' || minutesWaiting >= 5;
+    const icon = isResting ? '💤' : '⏳';
+    const textColor = isResting ? '#93c5fd' : '#fcd34d';
+    const targetText = `${icon} ${minutesWaiting} min`;
+
+    if (this.statusBubble.text !== targetText) {
+      this.statusBubble.setStyle({
+        fontSize: '11px',
+        fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+        fontStyle: 'bold',
+        color: textColor,
+        stroke: '#000000',
+        strokeThickness: 3,
+        shadow: {
+          offsetX: 0,
+          offsetY: 1.5,
+          color: '#000000',
+          blur: 3,
+          stroke: true,
+          fill: true
+        },
+        backgroundColor: null,
+        padding: { x: 4, y: 3 },
+        resolution: 3
+      });
+      this.statusBubble.setText(targetText);
+      this.statusBubble.setScale(1);
+
+      if (this.isHovered) {
+        this.emitHoverEvent();
+      }
+    }
+  }
+
   emitHoverEvent() {
     if (!this.active || !this.scene || !this.scene.sys) return;
-    const currentTime = this.scene.currentSimTime || Date.now();
-    const diffMs = Math.max(0, currentTime - (this.lastLogTime || this.lastSimActivity || currentTime));
-    const minutesWaiting = Math.floor(diffMs / 60000);
+    const { currentTime, effectiveLastLogTime, minutesWaiting } = this.getInactivityMetrics();
+    const effectiveStartTime = this.startTime || effectiveLastLogTime;
+    const workDurationMs = Math.max(0, effectiveLastLogTime - effectiveStartTime);
 
     const cam = this.scene.cameras.main;
     const screenX = (this.x - cam.scrollX) * cam.zoom;
@@ -598,16 +738,30 @@ export class Avatar extends Phaser.GameObjects.Container {
     let clientX = 0;
     let clientY = 0;
     if (canvas) {
-      const rect = canvas.getBoundingClientRect();
+      // Cachear getBoundingClientRect para evitar forzar reflow en cada frame
+      if (!this.scene._cachedCanvasRect || (currentTime - (this.scene._cachedCanvasRectTime || 0) > 1000)) {
+        this.scene._cachedCanvasRect = canvas.getBoundingClientRect();
+        this.scene._cachedCanvasRectTime = currentTime;
+      }
+      const rect = this.scene._cachedCanvasRect;
       clientX = rect.left + (screenX / gameW) * rect.width;
       clientY = rect.top + (screenY / gameH) * rect.height;
     }
+
+    this._lastHoverX = this.x;
+    this._lastHoverY = this.y;
+    this._lastCamX = cam.scrollX;
+    this._lastCamY = cam.scrollY;
+    this._lastHoverEmitTime = Date.now();
 
     this.scene.events.emit('AGENT_HOVER', {
       agentId: this.agentId,
       agentRole: this.agentRole,
       agentName: this.agentName || ROLE_LABELS[this.agentRole] || this.agentRole,
       minutesWaiting,
+      startTime: effectiveStartTime,
+      lastLogTime: effectiveLastLogTime,
+      workDurationMs,
       lastLogMessage: this.lastLogMessage,
       state: this.fsm?.state || 'IDLE',
       clientX,
@@ -633,20 +787,32 @@ export class Avatar extends Phaser.GameObjects.Container {
     this.add(this.sprite);
     this.bodyVisual = this.sprite;
 
-    // 3. Etiqueta de Rol
-    const labelText = ROLE_LABELS[this.agentRole] || ROLE_LABELS[normalizedRole] || this.agentRole.slice(0, 8);
+    // 3. Etiqueta de Rol / Nombre
+    const labelText = this.agentName || ROLE_LABELS[this.agentRole] || ROLE_LABELS[normalizedRole] || this.agentRole.slice(0, 8);
     this.label = this.scene.add.text(0, -44, labelText, {
-      fontSize: '10px',
-      fontFamily: 'monospace',
-      backgroundColor: '#0f172a',
-      color: '#f8fafc',
-      padding: { x: 4, y: 1 }
+      fontSize: '11px',
+      fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+      fontStyle: 'bold',
+      color: '#ffffff',
+      stroke: '#000000',
+      strokeThickness: 3,
+      shadow: {
+        offsetX: 0,
+        offsetY: 1.5,
+        color: '#000000',
+        blur: 3,
+        stroke: true,
+        fill: true
+      },
+      padding: { x: 4, y: 3 },
+      resolution: 3
     }).setOrigin(0.5);
     this.add(this.label);
 
     // 4. Icono de Estado (Bubble)
-    this.statusBubble = this.scene.add.text(0, -60, '', {
-      fontSize: '16px'
+    this.statusBubble = this.scene.add.text(0, -62, '', {
+      fontSize: '16px',
+      resolution: 3
     }).setOrigin(0.5);
     this.add(this.statusBubble);
   }
@@ -690,14 +856,15 @@ export class Avatar extends Phaser.GameObjects.Container {
     this.facingDirection = dx > 0 ? 'right' : (dx < 0 ? 'left' : (dy < 0 ? 'up' : 'down'));
   }
 
-  applySeatedFrame(dir = 'down', isDesk = true) {
+  applySeatedFrame(dir = 'up', isDesk = true) {
     if (!this.sprite) return;
     const normalizedRole = mapRawRoleToKey(this.agentRole);
     const workingFrame = ROLE_TO_WORKING_FRAME[this.agentRole] !== undefined
       ? ROLE_TO_WORKING_FRAME[this.agentRole]
       : ROLE_TO_WORKING_FRAME[normalizedRole];
 
-    if (isDesk && workingFrame !== undefined && this.scene.textures.exists('avatares_working') && dir !== 'left' && dir !== 'right') {
+    // Solo usar la variante de tecleo frontal sin piernas (avatares_working) cuando el escritorio está orientado hacia abajo (de frente)
+    if (isDesk && dir === 'down' && workingFrame !== undefined && this.scene.textures.exists('avatares_working')) {
       this.sprite.setTexture('avatares_working', workingFrame);
       this.sprite.setY(-6);
       this.sprite.setScale(AVATAR_SCALE);
@@ -707,7 +874,7 @@ export class Avatar extends Phaser.GameObjects.Container {
       const finalSpriteKey = this.scene.textures.exists(baseSpriteKey) ? baseSpriteKey : 'avatar_jefe';
       this.sprite.setTexture(finalSpriteKey);
 
-      let frame = 5; // up (espalda)
+      let frame = 5; // up (espalda mirando hacia arriba/al escritorio)
       if (dir === 'down') frame = 4; // frente (cuerpo completo con piernas)
       else if (dir === 'right') frame = 6; // perfil derecho
       else if (dir === 'left') frame = 7; // perfil izquierdo
@@ -717,6 +884,7 @@ export class Avatar extends Phaser.GameObjects.Container {
       this.sprite.setScale(AVATAR_SCALE);
       this.sprite.setAngle(0);
     }
+    this.facingDirection = dir;
   }
 
   applyStandingFrame(frame = 0) {
@@ -791,15 +959,35 @@ export class Avatar extends Phaser.GameObjects.Container {
     });
   }
 
+  setAgentName(name) {
+    if (!name) return;
+    this.agentName = name;
+    if (this.label && this.label.active) {
+      this.label.setText(name);
+    }
+  }
+
   emitSingleZ() {
     if (!this.scene || !this.scene.add) return;
     const zLetters = ['z', 'Z', 'z'];
     const letter = zLetters[Phaser.Math.Between(0, zLetters.length - 1)];
     const zText = this.scene.add.text(this.x + Phaser.Math.Between(4, 10), this.y - 42, letter, {
       fontSize: '13px',
-      fontFamily: 'monospace',
+      fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
       fontStyle: 'bold',
-      color: '#93c5fd'
+      color: '#93c5fd',
+      stroke: '#000000',
+      strokeThickness: 2.5,
+      shadow: {
+        offsetX: 0,
+        offsetY: 1,
+        color: '#000000',
+        blur: 2,
+        stroke: true,
+        fill: true
+      },
+      padding: { x: 2, y: 2 },
+      resolution: 3
     }).setOrigin(0.5);
     zText.setDepth(9500);
 
@@ -876,6 +1064,7 @@ export class Avatar extends Phaser.GameObjects.Container {
     if (!isAutoRest) {
       this.lastSimActivity = simTime || Date.now();
       this.lastRealActivity = Date.now();
+      this.updateInactivityBubble();
     }
     this.pendingState = telemetryState;
     
@@ -908,7 +1097,6 @@ export class Avatar extends Phaser.GameObjects.Container {
 
       if (!this.assignedLounge) {
         this.assignedLounge = this.scene.getRandomLoungeSpot();
-        this.assignedDesk = null; // Clear desk
       }
       
       const target = this.scene.gridToPx(this.assignedLounge.col, this.assignedLounge.row);
@@ -934,8 +1122,8 @@ export class Avatar extends Phaser.GameObjects.Container {
     
       if (!this.assignedDesk) {
         this.assignedDesk = this.scene.getRandomDesk(this.agentRole);
-        this.assignedLounge = null; // Clear lounge if they go back to work
       }
+      this.assignedLounge = null; // Liberar el spot de descanso al regresar a trabajar
       
       const target = this.scene.gridToPx(this.assignedDesk.col, this.assignedDesk.row);
       if (Phaser.Math.Distance.Between(this.x, this.y, target.x, target.y) > 10) {
@@ -966,8 +1154,24 @@ export class Avatar extends Phaser.GameObjects.Container {
     // Asegurar que el avatar siempre esté por encima de todos los objetos del diseño (props tienen depth < 1000)
     // Se usa 8000 + this.y para que mantengan Y-sorting entre ellos mismos si se cruzan.
     this.setDepth(8000 + this.y);
+    const now = Date.now();
+
+    // 1. Verificación periódica del estado de inactividad / espera (cada 1s)
+    if (!this._lastInactivityCheck || now - this._lastInactivityCheck >= 1000) {
+      this._lastInactivityCheck = now;
+      this.updateInactivityBubble();
+    }
+
+    // 2. Notificación de hover throttled
     if (this.isHovered) {
-      this.emitHoverEvent();
+      const cam = this.scene.cameras?.main;
+      const camMoved = cam && (Math.abs(cam.scrollX - (this._lastCamX || 0)) > 3 || Math.abs(cam.scrollY - (this._lastCamY || 0)) > 3);
+      const avatarMoved = Math.abs(this.x - (this._lastHoverX || 0)) > 3 || Math.abs(this.y - (this._lastHoverY || 0)) > 3;
+
+      // Solo reemitir si la posición en pantalla realmente cambió Y ha transcurrido al menos 150ms
+      if ((avatarMoved || camMoved) && (now - (this._lastHoverEmitTime || 0) > 150)) {
+        this.emitHoverEvent();
+      }
     }
   }
 

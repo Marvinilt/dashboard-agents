@@ -1,0 +1,1692 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DashboardAgents - Mapa 3D de Arquitectura Futurista</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&display=swap');
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #030712;
+      color: #f1f5f9;
+      font-family: 'Rajdhani', sans-serif;
+      user-select: none;
+    }
+
+    .font-scifi {
+      font-family: 'Orbitron', monospace;
+    }
+
+    .font-mono-code {
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .border-glow {
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      background: rgba(10, 15, 30, 0.85);
+      backdrop-filter: blur(14px);
+    }
+
+    .hud-scanline {
+      background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.2) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
+      background-size: 100% 3px, 6px 100%;
+      pointer-events: none;
+    }
+
+    /* Scrollbar cyber */
+    ::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(3, 7, 18, 0.8);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #0ea5e9;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body class="h-full w-full relative">
+
+  <!-- Escenario 3D (Canvas WebGL) -->
+  <div id="canvasContainer" class="w-full h-full absolute inset-0 cursor-grab active:cursor-grabbing overflow-hidden"></div>
+
+  <!-- Capa Scanlines Sci-Fi -->
+  <div class="hud-scanline absolute inset-0 z-10 pointer-events-none"></div>
+
+  <!-- Pantalla de Carga Holográfica -->
+  <div id="loadingStatus" class="absolute inset-0 z-50 flex items-center justify-center bg-slate-950/90 text-cyan-400 font-mono-code text-sm transition-opacity duration-300">
+    <div class="flex flex-col items-center gap-3 border-glow p-6 rounded-2xl shadow-2xl">
+      <div class="w-8 h-8 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin"></div>
+      <span class="tracking-widest animate-pulse">GENERANDO MAPA ESTELAR 3D...</span>
+    </div>
+  </div>
+
+  <!-- ======================================================= -->
+  <!-- HUD: Barra Superior Holográfica                         -->
+  <!-- ======================================================= -->
+  <header class="absolute top-3 left-3 right-3 z-20 flex flex-wrap items-center justify-between gap-3 pointer-events-none">
+    
+    <!-- Título y Estado del Sistema -->
+    <div class="border-glow rounded-xl p-2.5 px-4 flex items-center gap-3 shadow-2xl pointer-events-auto">
+      <div class="relative flex items-center justify-center">
+        <div class="w-3.5 h-3.5 rounded-full bg-cyan-400 animate-ping absolute opacity-75"></div>
+        <div class="w-3.5 h-3.5 rounded-full bg-cyan-500 shadow-[0_0_12px_#06b6d4]"></div>
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="font-scifi font-bold text-sm tracking-wider text-cyan-400">DASHBOARD_AGENTS // STAR_TOPOLOGY</span>
+          <span class="px-1.5 py-0.2 rounded text-[10px] font-mono-code bg-cyan-500/15 text-cyan-300 border border-cyan-500/30">ONLINE v2.0</span>
+        </div>
+        <p class="text-xs text-slate-400 font-medium">Constelación de carpetas, skills, agentes y módulos del proyecto</p>
+      </div>
+    </div>
+
+    <!-- Controles Centrales: Buscador y Presets de Cámara -->
+    <div class="border-glow rounded-xl p-2 flex items-center gap-2 shadow-2xl pointer-events-auto">
+      <!-- Buscador -->
+      <div class="relative">
+        <input 
+          type="text" 
+          id="searchInput" 
+          placeholder="Buscar estrella, skill, agente..." 
+          class="bg-slate-900/80 text-cyan-200 placeholder-slate-500 text-xs rounded-lg pl-8 pr-3 py-1.5 border border-cyan-500/30 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 w-48 sm:w-60 font-mono-code transition-all"
+        />
+        <svg class="w-3.5 h-3.5 absolute left-2.5 top-2 text-cyan-400/70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+        </svg>
+      </div>
+
+      <!-- Presets de Cámara -->
+      <div class="flex rounded-lg border border-slate-700 bg-slate-900/60 p-0.5 text-xs">
+        <button id="camAutoRotateBtn" class="px-2.5 py-1 rounded font-medium text-slate-300 hover:text-cyan-300 hover:bg-slate-800 transition-all flex items-center gap-1.5" title="Activar/Desactivar rotación orbital">
+          <span id="rotateLed" class="w-2 h-2 rounded-full bg-slate-500"></span>
+          <span>Auto Órbita</span>
+        </button>
+        <button id="camIsoBtn" class="px-2.5 py-1 rounded font-medium text-cyan-400 hover:bg-slate-800 transition-all">
+          Isometric
+        </button>
+        <button id="camTopBtn" class="px-2.5 py-1 rounded font-medium text-slate-300 hover:text-cyan-300 hover:bg-slate-800 transition-all">
+          Top-Down
+        </button>
+        <button id="camResetBtn" class="px-2.5 py-1 rounded font-medium text-slate-300 hover:text-cyan-300 hover:bg-slate-800 transition-all" title="Reiniciar Cámara">
+          ⟲
+        </button>
+      </div>
+    </div>
+
+    <!-- Indicador de Métricas Rápidas -->
+    <div class="border-glow rounded-xl p-2 px-3 flex items-center gap-4 text-xs font-mono-code pointer-events-auto">
+      <div>
+        <span class="text-slate-400 block text-[10px]">ESTRELLAS (NODOS)</span>
+        <span id="nodesCountLabel" class="font-bold text-cyan-400 text-sm">39</span>
+      </div>
+      <div class="w-px h-6 bg-slate-700"></div>
+      <div>
+        <span class="text-slate-400 block text-[10px]">CONEXIONES</span>
+        <span id="linksCountLabel" class="font-bold text-purple-400 text-sm">54</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ======================================================= -->
+  <!-- BARRA DE FILTROS POR CATEGORÍA                         -->
+  <!-- ======================================================= -->
+  <div class="absolute top-20 left-3 z-20 flex flex-wrap gap-1.5 pointer-events-auto max-w-[85vw]">
+    <button data-cat="all" class="cat-pill px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider border border-cyan-400 bg-cyan-500/20 text-cyan-300 shadow-[0_0_10px_rgba(6,182,212,0.3)] transition-all">
+      Todos
+    </button>
+    <button data-cat="folder" class="cat-pill px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider border border-slate-700 bg-slate-900/60 text-slate-400 hover:border-sky-400 transition-all flex items-center gap-1.5">
+      <span class="w-2 h-2 rounded-full bg-sky-400 shadow-[0_0_6px_#38bdf8]"></span> Carpetas (Hubs)
+    </button>
+    <button data-cat="agent" class="cat-pill px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider border border-slate-700 bg-slate-900/60 text-slate-400 hover:border-amber-400 transition-all flex items-center gap-1.5">
+      <span class="w-2 h-2 rounded-full bg-amber-400 shadow-[0_0_6px_#f59e0b]"></span> Agentes IA
+    </button>
+    <button data-cat="skill" class="cat-pill px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider border border-slate-700 bg-slate-900/60 text-slate-400 hover:border-pink-400 transition-all flex items-center gap-1.5">
+      <span class="w-2 h-2 rounded-full bg-pink-400 shadow-[0_0_6px_#ec4899]"></span> Skills & Pipelines
+    </button>
+    <button data-cat="backend" class="cat-pill px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider border border-slate-700 bg-slate-900/60 text-slate-400 hover:border-blue-400 transition-all flex items-center gap-1.5">
+      <span class="w-2 h-2 rounded-full bg-blue-400 shadow-[0_0_6px_#60a5fa]"></span> Backend Node
+    </button>
+    <button data-cat="frontend" class="cat-pill px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider border border-slate-700 bg-slate-900/60 text-slate-400 hover:border-emerald-400 transition-all flex items-center gap-1.5">
+      <span class="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_6px_#10b981]"></span> React & Phaser
+    </button>
+    <button data-cat="context" class="cat-pill px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider border border-slate-700 bg-slate-900/60 text-slate-400 hover:border-indigo-400 transition-all flex items-center gap-1.5">
+      <span class="w-2 h-2 rounded-full bg-indigo-400 shadow-[0_0_6px_#818cf8]"></span> Contexto & Specs
+    </button>
+  </div>
+
+  <!-- ======================================================= -->
+  <!-- TOOLTIP FLOTANTE 2D ANCLADO AL CURSOR                   -->
+  <!-- ======================================================= -->
+  <div id="hoverTooltip" class="absolute z-30 pointer-events-none opacity-0 transition-opacity duration-150 border-glow rounded-lg p-2.5 shadow-2xl flex flex-col gap-1 w-64">
+    <div class="flex items-center justify-between">
+      <span id="ttBadge" class="px-1.5 py-0.2 rounded text-[10px] font-mono-code uppercase font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+        ESTRELLA
+      </span>
+      <span id="ttIcon" class="text-sm">✨</span>
+    </div>
+    <div id="ttName" class="font-scifi font-bold text-xs text-white tracking-wide truncate">
+      Nombre del Nodo
+    </div>
+    <div id="ttSub" class="text-[11px] text-slate-400 truncate font-mono-code">
+      subcarpeta / archivo
+    </div>
+  </div>
+
+  <!-- ======================================================= -->
+  <!-- PANEL LATERAL INSPECTOR DE DETALLES                     -->
+  <!-- ======================================================= -->
+  <aside id="inspectorPanel" style="transform: translateX(115%); opacity: 0; pointer-events: none; transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease;" class="absolute top-24 right-3 bottom-6 w-96 max-w-[92vw] border-glow rounded-2xl p-4 flex flex-col z-30 shadow-[0_0_40px_rgba(0,0,0,0.9)] overflow-hidden">
+    
+    <!-- Encabezado del Inspector -->
+    <div class="flex items-start justify-between border-b border-slate-700/80 pb-3">
+      <div class="flex items-center gap-3">
+        <div id="inspIconBox" class="w-11 h-11 rounded-xl bg-slate-900 border border-cyan-500/40 flex items-center justify-center text-2xl shadow-[0_0_15px_rgba(6,182,212,0.35)]">
+          ✨
+        </div>
+        <div>
+          <span id="inspCategoryBadge" class="px-2 py-0.5 rounded text-[10px] font-mono-code font-bold uppercase tracking-wider bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+            CARPETA PRINCIPAL
+          </span>
+          <h2 id="inspNodeName" class="font-scifi font-bold text-base text-white tracking-wide mt-0.5 leading-tight">
+            backend/
+          </h2>
+        </div>
+      </div>
+      <button id="closeInspectorBtn" class="text-slate-400 hover:text-cyan-300 p-1.5 rounded-lg hover:bg-slate-800 transition-colors">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+      </button>
+    </div>
+
+    <!-- Cuerpo Desplazable del Inspector -->
+    <div class="flex-1 overflow-y-auto pt-3.5 space-y-4 pr-1 text-xs">
+      
+      <!-- Ruta de archivo -->
+      <div>
+        <label class="font-scifi text-[10px] text-slate-400 uppercase tracking-widest block mb-1">
+          Ruta Física del Elemento
+        </label>
+        <div class="bg-slate-950/85 border border-slate-800 rounded-lg p-2 font-mono-code text-[11px] text-cyan-300 break-all select-all flex items-center justify-between">
+          <span id="inspPath">backend/src/server.js</span>
+          <button id="copyPathBtn" title="Copiar ruta" class="ml-2 text-slate-400 hover:text-cyan-400">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- ¿Qué es esa parte y para qué sirve? -->
+      <div>
+        <label class="font-scifi text-[10px] text-cyan-400 uppercase tracking-widest block mb-1">
+          ¿Qué es esta parte y para qué sirve?
+        </label>
+        <div id="inspDescription" class="bg-slate-950/60 border border-cyan-500/25 rounded-xl p-3 text-slate-200 leading-relaxed font-sans text-xs shadow-inner">
+          Descripción completa del rol en el sistema.
+        </div>
+      </div>
+
+      <!-- Capacidades y Features Clave -->
+      <div>
+        <label class="font-scifi text-[10px] text-purple-400 uppercase tracking-widest block mb-1.5">
+          Capacidades Técnicas & Tokens
+        </label>
+        <div id="inspTags" class="flex flex-wrap gap-1.5"></div>
+      </div>
+
+      <!-- Conexiones Entrantes -->
+      <div>
+        <label class="font-scifi text-[10px] text-emerald-400 uppercase tracking-widest block mb-1.5 flex items-center gap-1.5">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16l-4-4m0 0l4-4m-4 4h18"></path></svg>
+          Recibe Datos / Invocado Por (Entradas)
+        </label>
+        <div id="inspInboundList" class="space-y-1.5"></div>
+      </div>
+
+      <!-- Conexiones Salientes -->
+      <div>
+        <label class="font-scifi text-[10px] text-sky-400 uppercase tracking-widest block mb-1.5 flex items-center gap-1.5">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"></path></svg>
+          Envía Datos / Escribe Hacia (Salidas)
+        </label>
+        <div id="inspOutboundList" class="space-y-1.5"></div>
+      </div>
+
+    </div>
+
+    <!-- Pie del Inspector -->
+    <div class="pt-3 border-t border-slate-700/80 mt-auto flex items-center justify-between">
+      <span class="text-[11px] text-slate-400 font-mono-code">Arrastra estrellas para moverlas</span>
+      <button id="focusNodeBtn" class="px-3 py-1.5 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-scifi font-bold text-xs rounded-lg shadow-[0_0_15px_rgba(6,182,212,0.5)] transition-all">
+        ENFOCAR ESTRELLA
+      </button>
+    </div>
+
+  </aside>
+
+  <!-- ======================================================= -->
+  <!-- GUÍA DE CONTROLES INFERIOR                              -->
+  <!-- ======================================================= -->
+  <footer class="absolute bottom-3 left-3 z-20 pointer-events-none flex items-center gap-3 border-glow rounded-xl px-3 py-1.5 text-xs font-mono-code text-slate-400 shadow-xl">
+    <div class="flex items-center gap-1.5">
+      <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
+      <span class="text-slate-300 font-semibold">Click en Estrella:</span> Ver Detalle
+    </div>
+    <span class="opacity-30">|</span>
+    <div class="flex items-center gap-1.5">
+      <span class="w-2 h-2 rounded-full bg-pink-400"></span>
+      <span class="text-slate-300 font-semibold">Arrastrar Estrella:</span> Mover en 3D
+    </div>
+    <span class="opacity-30">|</span>
+    <div class="flex items-center gap-1.5">
+      <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+      <span class="text-slate-300 font-semibold">Click Fondo:</span> Rotar Órbita
+    </div>
+    <span class="opacity-30">|</span>
+    <div class="flex items-center gap-1.5">
+      <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+      <span class="text-slate-300 font-semibold">Rueda:</span> Zoom
+    </div>
+  </footer>
+
+  <!-- ======================================================= -->
+  <!-- LOADER ROBUSTO Y LÓGICA DE APLICACIÓN THREE.JS          -->
+  <!-- ======================================================= -->
+  <script>
+    // ---------------------------------------------------------
+    // 1. CARGADOR ROBUSTO DE SCRIPTS THREE.JS + ORBITCONTROLS
+    // ---------------------------------------------------------
+    function loadScriptSequentially(url) {
+      return new Promise((resolve) => {
+        const s = document.createElement('script');
+        s.src = url;
+        s.async = false;
+        s.onload = () => resolve(true);
+        s.onerror = () => resolve(false);
+        document.head.appendChild(s);
+      });
+    }
+
+    async function ensureDependencies() {
+      if (typeof THREE === 'undefined') {
+        const threeCandidates = [
+          'vendor/three.min.js',
+          'docs/vendor/three.min.js',
+          'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js',
+          'https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js'
+        ];
+        for (const candidate of threeCandidates) {
+          const ok = await loadScriptSequentially(candidate);
+          if (ok && typeof THREE !== 'undefined') break;
+        }
+      }
+
+      if (typeof THREE === 'undefined') {
+        throw new Error('No se pudo cargar Three.js desde rutas locales ni CDN.');
+      }
+
+      if (typeof THREE.OrbitControls === 'undefined') {
+        const orbitCandidates = [
+          'vendor/OrbitControls.js',
+          'docs/vendor/OrbitControls.js',
+          'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js',
+          'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/controls/OrbitControls.js'
+        ];
+        for (const candidate of orbitCandidates) {
+          const ok = await loadScriptSequentially(candidate);
+          if (ok && typeof THREE.OrbitControls !== 'undefined') break;
+        }
+      }
+    }
+
+    // ---------------------------------------------------------
+    // 2. DATASET DEL SISTEMA: EXCLUSIVO DEL REPOSITORIO
+    // (Sin archivos externos de .gemini)
+    // ---------------------------------------------------------
+    const SYSTEM_GRAPH = {
+      nodes: [
+        // HUBS PRINCIPALES (CARPETAS GRANDES DEL PROYECTO)
+        {
+          id: 'hub_backend',
+          name: 'backend/',
+          type: 'folder',
+          isHub: true,
+          icon: '⚡',
+          path: 'backend/',
+          pos: [-170, 60, -60],
+          color: '#38bdf8',
+          starSize: 34,
+          summary: 'Servidor central en Node.js + Express + Socket.IO (Puerto 3001). Orquesta el escaneo de sesiones, la ingestión en vivo con Chokidar y el motor de simulación histórica.',
+          features: ['Express REST API', 'Socket.IO Server', 'Chokidar Watcher', 'Simulation Engine', 'Event Normalizer']
+        },
+        {
+          id: 'hub_frontend',
+          name: 'frontend/',
+          type: 'folder',
+          isHub: true,
+          icon: '🎮',
+          path: 'frontend/',
+          pos: [-150, -70, 90],
+          color: '#10b981',
+          starSize: 34,
+          summary: 'Cliente interactivo construido con React 19, Vite, TailwindCSS y el motor Phaser 3. Renderiza la oficina virtual isométrica con avatares, terminal HUD y editor de entorno.',
+          features: ['Phaser 3 Canvas', 'React 19 Hooks', 'Socket.IO Client', 'Top-Down Grid 27x16', 'Tile Editor']
+        },
+        {
+          id: 'hub_agents',
+          name: '.agents/',
+          type: 'folder',
+          isHub: true,
+          icon: '🤖',
+          path: '.agents/',
+          pos: [170, 70, -60],
+          color: '#ec4899',
+          starSize: 32,
+          summary: 'Directorio de especificaciones y capacidades modulares del sistema de agentes. Contiene skills especializadas (como asset-generator) y scripts de procesamiento autónomo.',
+          features: ['Custom Skills', 'Asset Generator', 'Image Prompts', 'Automated Post-processing']
+        },
+        {
+          id: 'hub_scripts',
+          name: 'scripts/',
+          type: 'folder',
+          isHub: true,
+          icon: '🐍',
+          path: 'scripts/',
+          pos: [160, -70, 80],
+          color: '#a855f7',
+          starSize: 30,
+          summary: 'Colección de scripts en Python para procesamiento de imágenes, extracción de máscaras de transparencia, alineación de posturas sentadas y calibración de spritesheets.',
+          features: ['PIL / OpenCV', 'Alpha Matte Extraction', 'Bounding Box Calibration', 'Sprite Normalization']
+        },
+        {
+          id: 'hub_docs',
+          name: 'docs/',
+          type: 'folder',
+          isHub: true,
+          icon: '📚',
+          path: 'docs/',
+          pos: [-30, -150, -70],
+          color: '#f59e0b',
+          starSize: 30,
+          summary: 'Documentación técnica, especificaciones OpenAPI, diagramas de flujo arquitectónico y artefactos de visualización interactiva del sistema.',
+          features: ['documentacionTecnica.md', 'Architecture ADRs', 'Payload Schemas', '2D & 3D Visualizers']
+        },
+        {
+          id: 'hub_root',
+          name: 'context_root/',
+          type: 'folder',
+          isHub: true,
+          icon: '📑',
+          path: './',
+          pos: [20, 60, 170],
+          color: '#6366f1',
+          starSize: 32,
+          summary: 'Raíz del proyecto que alberga los documentos de diseño, planes de orquestación multi-agente, bitácora de cambios y el script de arranque start_dashboard.bat.',
+          features: ['Plan_Multi_Agente.md', 'Documento_Requerimientos', 'start_dashboard.bat', 'CHANGELOG.md']
+        },
+
+        // BACKEND NODOS
+        {
+          id: 'node_server_js',
+          name: 'server.js',
+          type: 'backend',
+          icon: '🚀',
+          path: 'backend/src/server.js',
+          parentHub: 'hub_backend',
+          pos: [-230, 80, -20],
+          color: '#38bdf8',
+          starSize: 18,
+          summary: 'Servidor Express + Socket.IO. Inicializa el listener en el puerto 3001, expone el endpoint GET /api/sessions para escanear carpetas y conmuta entre modo Live y Simulación.',
+          features: ['Puerto 3001', 'scanDirectoryForSessions', 'Socket.IO AGENT_EVENT', 'REST Endpoints']
+        },
+        {
+          id: 'node_watcher_js',
+          name: 'watcher.js',
+          type: 'backend',
+          icon: '👁️',
+          path: 'backend/src/watcher.js',
+          parentHub: 'hub_backend',
+          pos: [-200, 130, -90],
+          color: '#38bdf8',
+          starSize: 18,
+          summary: 'Motor Live Watcher basado en Chokidar. Lee incrementos en logs en tiempo real y adjunta dinámicamente nuevos observadores recursivos para subagentes.',
+          features: ['Chokidar Watcher', 'Dynamic Attach Map', 'Subagent Discovery', 'Live Log Streaming']
+        },
+        {
+          id: 'node_simulator_js',
+          name: 'simulator.js',
+          type: 'backend',
+          icon: '⏱️',
+          path: 'backend/src/simulator.js',
+          parentHub: 'hub_backend',
+          pos: [-130, 120, -100],
+          color: '#38bdf8',
+          starSize: 18,
+          summary: 'Motor de simulación temporal. Carga sesiones pasadas, calcula diferencias de marcas de tiempo y reproduce eventos a velocidad acelerada (1x a 10x) con pausa y salto.',
+          features: ['Multiplicador 1x-10x', 'Timeline Scrubbing', 'EventQueue Sorting', 'Historical Replay']
+        },
+        {
+          id: 'node_parser_js',
+          name: 'parser.js',
+          type: 'backend',
+          icon: '🧬',
+          path: 'backend/src/parser.js',
+          parentHub: 'hub_backend',
+          pos: [-150, 30, -110],
+          color: '#38bdf8',
+          starSize: 18,
+          summary: 'Parser semántico. Decodifica los logs JSONL del orquestador, detecta herramientas en uso (write_to_file, run_command) y clasifica el estado del avatar (SPAWNING, WORKING, etc.).',
+          features: ['parseTranscriptLine', 'mapSubagentRole', 'FSM State Inference', 'ROLE_DEFINITIONS']
+        },
+        {
+          id: 'node_test_reader',
+          name: 'test_reader.js',
+          type: 'backend',
+          icon: '🧪',
+          path: 'backend/src/test_reader.js',
+          parentHub: 'hub_backend',
+          pos: [-240, 20, -70],
+          color: '#38bdf8',
+          starSize: 16,
+          summary: 'Script de prueba para validar la lectura de streams de telemetría y parseo rápido por consola sin iniciar todo el servidor.',
+          features: ['CLI Reader', 'Stream Validation', 'Log Debugger']
+        },
+
+        // FRONTEND REACT & PHASER
+        {
+          id: 'node_app_jsx',
+          name: 'App.jsx',
+          type: 'frontend',
+          icon: '⚛️',
+          path: 'frontend/src/App.jsx',
+          parentHub: 'hub_frontend',
+          pos: [-210, -50, 120],
+          color: '#10b981',
+          starSize: 20,
+          summary: 'Componente raíz de React. Establece conexión WebSocket con el backend, gestiona el búfer circular de 500 eventos de telemetría, métricas globales y el modo pantalla maximizada.',
+          features: ['Socket.IO Client', 'telemetryLogs Buffer', 'Agent HUD State', 'Maximized View Mode']
+        },
+        {
+          id: 'node_office_scene',
+          name: 'OfficeScene.js',
+          type: 'frontend',
+          icon: '🏢',
+          path: 'frontend/src/game/OfficeScene.js',
+          parentHub: 'hub_frontend',
+          pos: [-90, -80, 130],
+          color: '#10b981',
+          starSize: 20,
+          summary: 'Escena ortogonal principal de Phaser 3 (27x16 cuadrícula, 32px por casilla). Controla el pathfinding con EasyStar.js, el ciclo día/noche y la asignación de escritorios.',
+          features: ['Grid 27x16 (32px)', 'EasyStar.js Pathfinding', 'Hover Tooltips', 'Day/Night Cycle', 'Collision Grid']
+        },
+        {
+          id: 'node_avatar_js',
+          name: 'Avatar.js',
+          type: 'frontend',
+          icon: '🏃',
+          path: 'frontend/src/game/Avatar.js',
+          parentHub: 'hub_frontend',
+          pos: [-80, -140, 70],
+          color: '#10b981',
+          starSize: 18,
+          summary: 'Entidad de avatar con máquina de estados finita: caminar 4 direcciones, squash & stretch procedural al desplazarse, postura de escritorio y globos de alerta (⚠️).',
+          features: ['FSM 5 Estados', 'Squash & Stretch', 'Partículas de Pisadas', 'Burbujas de Diálogo']
+        },
+        {
+          id: 'node_agent_sidebar',
+          name: 'AgentSidebar.jsx',
+          type: 'frontend',
+          icon: '📋',
+          path: 'frontend/src/components/AgentSidebar.jsx',
+          parentHub: 'hub_frontend',
+          pos: [-190, -120, 60],
+          color: '#10b981',
+          starSize: 18,
+          summary: 'Panel deslizante de telemetría de agentes. Renderiza una terminal de logs en vivo, cadena de razonamiento (thoughts) y formulario para responder preguntas humanas.',
+          features: ['Live Terminal Logs', 'Thought Chain Viewer', 'Tool Arguments', 'Human Feedback Form']
+        },
+        {
+          id: 'node_editor_ui',
+          name: 'EditorUI.jsx',
+          type: 'frontend',
+          icon: '🛠️',
+          path: 'frontend/src/components/EditorUI.jsx',
+          parentHub: 'hub_frontend',
+          pos: [-150, -10, 140],
+          color: '#10b981',
+          starSize: 18,
+          summary: 'Editor visual en caliente de la oficina virtual. Permite colocar escritorios, plantas, sillones lounge y pintar pisos y paredes celda por celda con atajo R de rotación.',
+          features: ['Drag-to-Paint', 'Atajo R (Rotación)', 'Catálogo de Objetos', 'Exportación JSON']
+        },
+        {
+          id: 'node_session_selector',
+          name: 'SessionSelector.jsx',
+          type: 'frontend',
+          icon: '🎛️',
+          path: 'frontend/src/components/SessionSelector.jsx',
+          parentHub: 'hub_frontend',
+          pos: [-220, 0, 80],
+          color: '#10b981',
+          starSize: 16,
+          summary: 'Barra de selección de sesión, control de velocidad (1x a 10x), alternador de modo Live/Simulación y selector de rutas personalizadas.',
+          features: ['Session Picker', 'Speed Multiplier', 'Mode Switcher']
+        },
+        {
+          id: 'node_phaser_game',
+          name: 'PhaserGame.jsx',
+          type: 'frontend',
+          icon: '🎮',
+          path: 'frontend/src/components/PhaserGame.jsx',
+          parentHub: 'hub_frontend',
+          pos: [-120, -50, 160],
+          color: '#10b981',
+          starSize: 16,
+          summary: 'Componente puente entre React y Phaser 3. Monta el contenedor Canvas WebGL y gestiona el ciclo de vida sin pérdidas de memoria.',
+          features: ['Phaser.Game Mounting', 'Unmount Cleanup', 'Scene Ref Exposure']
+        },
+        {
+          id: 'node_event_bus',
+          name: 'eventBus.js',
+          type: 'frontend',
+          icon: '🔄',
+          path: 'frontend/src/game/eventBus.js',
+          parentHub: 'hub_frontend',
+          pos: [-130, -100, 30],
+          color: '#10b981',
+          starSize: 16,
+          summary: 'Bus de eventos desacoplado entre React y Phaser. Evita bajones de FPS y fugas de memoria manteniendo el loop a 60 FPS independiente de los re-renders de React.',
+          features: ['Patrón Decoupled', 'SPAWN_AGENT', 'HIGHLIGHT_AGENT', 'Zero Memory Leak']
+        },
+        {
+          id: 'node_default_layout',
+          name: 'defaultLayout.json',
+          type: 'frontend',
+          icon: '🗺️',
+          path: 'frontend/src/game/defaultLayout.json',
+          parentHub: 'hub_frontend',
+          pos: [-40, -60, 110],
+          color: '#10b981',
+          starSize: 16,
+          summary: 'Definición de nivel de la oficina virtual: coordenadas exactas de escritorios de trabajo, áreas de lounge de descanso, paredes y matriz de celdas transitables.',
+          features: ['Desk Positions', 'Lounge Spots', 'Collision Layer', 'Prop Placements']
+        },
+        {
+          id: 'node_agent_mapper',
+          name: 'agentMapper.js',
+          type: 'frontend',
+          icon: '🎭',
+          path: 'frontend/src/game/agentMapper.js',
+          parentHub: 'hub_frontend',
+          pos: [-30, -110, 60],
+          color: '#10b981',
+          starSize: 16,
+          summary: 'Mapeador de identidad de agentes. Vincula roles semánticos (Tech Lead, Developer, QA, etc.) con sus respectivas texturas y asigna escritorios de trabajo.',
+          features: ['7 Roles Dedicados', 'Mapeo a Spritesheets', 'Asignación de Estaciones']
+        },
+
+        // SKILLS Y SCRIPTS
+        {
+          id: 'node_skill_asset_gen',
+          name: 'asset-generator (Skill)',
+          type: 'skill',
+          icon: '✨',
+          path: '.agents/skills/asset-generator/SKILL.md',
+          parentHub: 'hub_agents',
+          pos: [220, 100, -30],
+          color: '#ec4899',
+          starSize: 20,
+          summary: 'Skill autónoma para generar, procesar y optimizar assets 2D para la oficina virtual. Exige vista ortográfica abatida a 75° sobre fondo blanco y estilo vintage.',
+          features: ['Prompt Maestro 75°', 'Fondo Blanco Puro', 'Pipeline Automatizado', 'Estilo Pixel/Ilustrado']
+        },
+        {
+          id: 'node_process_asset_py',
+          name: 'process_asset.py',
+          type: 'skill',
+          icon: '✂️',
+          path: '.agents/skills/asset-generator/scripts/process_asset.py',
+          parentHub: 'hub_agents',
+          pos: [190, 30, -110],
+          color: '#ec4899',
+          starSize: 16,
+          summary: 'Script de post-procesamiento. Elimina automáticamente el fondo blanco, extrae el bounding box justo y comprime el PNG directamente en frontend/src/assets/objetos.',
+          features: ['Alpha Transparency', 'Bounding Box Crop', 'PNG Compression', 'Direct Export']
+        },
+        {
+          id: 'node_process_avatar_py',
+          name: 'process_avatar.py',
+          type: 'skill',
+          icon: '🎨',
+          path: 'scripts/process_avatar.py',
+          parentHub: 'hub_scripts',
+          pos: [210, -80, 40],
+          color: '#a855f7',
+          starSize: 18,
+          summary: 'Segmentador de avatares. Procesa hojas de spritesheets generadas por IA, remueve fondos y prepara fotogramas para animación direccional.',
+          features: ['Sprite Slicing', 'PIL Image Processing', 'Alpha Cleanup']
+        },
+        {
+          id: 'node_align_avatars_py',
+          name: 'align_working_avatars.py',
+          type: 'skill',
+          icon: '📐',
+          path: 'scripts/align_working_avatars.py',
+          parentHub: 'hub_scripts',
+          pos: [190, -20, 130],
+          color: '#a855f7',
+          starSize: 18,
+          summary: 'Calibrador de postura sentada. Centra y recorta el torso de los avatares para que coincidan de forma milimétrica con los escritorios en perspectiva.',
+          features: ['Desk Pose Alignment', 'Centrado 688x768', 'Bounding Box Fit']
+        },
+        {
+          id: 'node_check_bbox_py',
+          name: 'check_sitting_bbox.py',
+          type: 'skill',
+          icon: '🔍',
+          path: 'scripts/check_sitting_bbox.py',
+          parentHub: 'hub_scripts',
+          pos: [230, -50, 90],
+          color: '#a855f7',
+          starSize: 16,
+          summary: 'Herramienta de diagnóstico visual para validar cajas delimitadoras y recorte exacto de avatares en posiciones sentadas.',
+          features: ['Bounding Box Check', 'Asset Quality Control']
+        },
+
+        // DOCUMENTOS Y CONTEXTO
+        {
+          id: 'node_doc_tecnica',
+          name: 'documentacionTecnica.md',
+          type: 'context',
+          icon: '📖',
+          path: 'docs/documentacionTecnica.md',
+          parentHub: 'hub_docs',
+          pos: [-90, -160, -20],
+          color: '#f59e0b',
+          starSize: 18,
+          summary: 'Documento maestro de arquitectura. Describe el flujo cliente-servidor con diagramas Mermaid, payloads OpenAPI y las 2 decisiones arquitectónicas (ADRs).',
+          features: ['Architecture Diagram', 'Payload Schemas', 'EventBus ADR', 'Subagent Scan ADR']
+        },
+        {
+          id: 'node_graph_2d',
+          name: 'project_architecture_graph.html',
+          type: 'context',
+          icon: '🗺️',
+          path: 'docs/project_architecture_graph.html',
+          parentHub: 'hub_docs',
+          pos: [10, -160, -90],
+          color: '#f59e0b',
+          starSize: 16,
+          summary: 'Visualizador 2D interactivo del flujo de componentes del proyecto en vista vertical y por capas.',
+          features: ['2D Interactive Map', 'Tailwind Widget', 'Layer Explorer']
+        },
+        {
+          id: 'node_plan_multi_agente',
+          name: 'Plan_Multi_Agente.md',
+          type: 'context',
+          icon: '🗺️',
+          path: 'Plan_Multi_Agente.md',
+          parentHub: 'hub_root',
+          pos: [-50, 40, 210],
+          color: '#6366f1',
+          starSize: 18,
+          summary: 'Especificación de escaneo recursivo. Detalla cómo el backend intercepta el log de creación de subagentes para conectarse dinámicamente a sus archivos de telemetría.',
+          features: ['Recursive Attach', 'SUBAGENT_CREATED', 'Log URI Extraction']
+        },
+        {
+          id: 'node_req_general',
+          name: 'Documento_Requerimientos_General.md',
+          type: 'context',
+          icon: '📋',
+          path: 'Documento_Requerimientos_General.md',
+          parentHub: 'hub_root',
+          pos: [70, 40, 210],
+          color: '#6366f1',
+          starSize: 18,
+          summary: 'Visión general y requerimientos del proyecto gamificado: estados del avatar (SPAWNING, WORKING, WAITING_INPUT), resolución de bloqueos y diseño de la oficina.',
+          features: ['Gamification Vision', 'FSM Spec', 'Avatar Animations', 'Human Input Loop']
+        },
+        {
+          id: 'node_plan_implementacion',
+          name: 'Plan_Implementacion.md',
+          type: 'context',
+          icon: '📅',
+          path: 'Plan_Implementacion.md',
+          parentHub: 'hub_root',
+          pos: [-10, 110, 190],
+          color: '#6366f1',
+          starSize: 16,
+          summary: 'Hoja de ruta por fases de desarrollo: Fase 1 (Telemetría), Fase 2 (Simulador), Fase 3 (UI React), Fase 4 (Phaser), Fase 5 (HUD) y Fase 6 (Watcher real).',
+          features: ['Roadmap', 'Fases 1 a 6', 'Checklists de Entrega']
+        },
+        {
+          id: 'node_start_bat',
+          name: 'start_dashboard.bat',
+          type: 'context',
+          icon: '⚡',
+          path: 'start_dashboard.bat',
+          parentHub: 'hub_root',
+          pos: [10, 0, 220],
+          color: '#6366f1',
+          starSize: 16,
+          summary: 'Script ejecutable en Windows para arrancar con un solo doble clic el backend en el puerto 3001 y el servidor de desarrollo de Vite en el puerto 5173.',
+          features: ['Dual Process Launch', 'Backend 3001', 'Frontend 5173']
+        },
+
+        // CONSTELACIÓN DE AGENTES DE IA (CATÁLOGO PROPIO DEL PROYECTO)
+        {
+          id: 'agent_team_leader',
+          name: 'Team Leader',
+          type: 'agent',
+          icon: '👑',
+          path: 'Rol Maestro (agentMapper.js)',
+          pos: [0, 210, 0],
+          color: '#f59e0b',
+          starSize: 22,
+          summary: 'Agente orquestador y líder del proyecto. Analiza peticiones complejas, diseña planes de ejecución e invoca recursivamente a los subagentes especializados.',
+          features: ['Task Planner', 'Subagent Dispatcher', 'Prompt Engineering', 'Reviewer']
+        },
+        {
+          id: 'agent_developer',
+          name: 'Senior Developer',
+          type: 'agent',
+          icon: '💻',
+          path: 'Rol Desarrollo (agentMapper.js)',
+          pos: [-70, 180, 60],
+          color: '#38bdf8',
+          starSize: 18,
+          summary: 'Especialista en código frontend y backend. Implementa funcionalidades en React, Node, WebSockets y resuelve requerimientos de arquitectura.',
+          features: ['React 19', 'Express / Socket.IO', 'Phaser 3', 'TailwindCSS']
+        },
+        {
+          id: 'agent_designer',
+          name: 'UI/UX Designer',
+          type: 'agent',
+          icon: '🎨',
+          path: 'Rol Diseño (agentMapper.js)',
+          pos: [70, 180, 60],
+          color: '#f43f5e',
+          starSize: 18,
+          summary: 'Diseñadora de interfaces y mobiliario. Utiliza la skill asset-generator para proponer mobiliario, esquemas de color y paletas visuales para la oficina.',
+          features: ['Interface Design', 'Asset Generator Trigger', 'Palette & Layouts']
+        },
+        {
+          id: 'agent_dba',
+          name: 'Arquitecto DBA',
+          type: 'agent',
+          icon: '🗄️',
+          path: 'Rol Datos (agentMapper.js)',
+          pos: [-80, 180, -60],
+          color: '#f59e0b',
+          starSize: 18,
+          summary: 'Arquitecto de bases de datos. Estructura modelos relacionales, esquemas de persistencia y optimización de flujos de datos.',
+          features: ['Data Modeling', 'Migration Scripts', 'Query Optimization']
+        },
+        {
+          id: 'agent_qa',
+          name: 'QA SDET',
+          type: 'agent',
+          icon: '🧪',
+          path: 'Rol Calidad (agentMapper.js)',
+          pos: [80, 180, -60],
+          color: '#10b981',
+          starSize: 18,
+          summary: 'Especialista en aseguramiento de calidad y pruebas automatizadas. Valida el correcto funcionamiento de endpoints y renderizado.',
+          features: ['E2E Testing', 'Regression Tests', 'Bug Reporting']
+        },
+        {
+          id: 'agent_security',
+          name: 'Auditor Seguridad',
+          type: 'agent',
+          icon: '🛡️',
+          path: 'Rol Seguridad (agentMapper.js)',
+          pos: [-110, 160, 0],
+          color: '#ef4444',
+          starSize: 18,
+          summary: 'Auditor de seguridad cibernética. Inspecciona paquetes de dependencias, valida encabezados CORS y audita permisos en el filesystem.',
+          features: ['Vulnerability Scan', 'CORS & CSP Audit', 'Dependency Checker']
+        },
+        {
+          id: 'agent_documenter',
+          name: 'Documentador Técnico',
+          type: 'agent',
+          icon: '📝',
+          path: 'Rol Documentación (agentMapper.js)',
+          pos: [110, 160, 0],
+          color: '#a855f7',
+          starSize: 18,
+          summary: 'Responsable de actualizar la documentación técnica, diagramas de arquitectura, bitácoras de cambios y manuales de usuario.',
+          features: ['Technical Writing', 'Markdown Specs', 'ADR Documentation']
+        }
+      ],
+
+      links: [
+        // Relaciones estructurales (Carpeta a Archivo)
+        { source: 'hub_backend', target: 'node_server_js', label: 'Contiene', type: 'structure' },
+        { source: 'hub_backend', target: 'node_watcher_js', label: 'Contiene', type: 'structure' },
+        { source: 'hub_backend', target: 'node_simulator_js', label: 'Contiene', type: 'structure' },
+        { source: 'hub_backend', target: 'node_parser_js', label: 'Contiene', type: 'structure' },
+        { source: 'hub_backend', target: 'node_test_reader', label: 'Contiene', type: 'structure' },
+
+        { source: 'hub_frontend', target: 'node_app_jsx', label: 'Contiene', type: 'structure' },
+        { source: 'hub_frontend', target: 'node_office_scene', label: 'Contiene', type: 'structure' },
+        { source: 'hub_frontend', target: 'node_avatar_js', label: 'Contiene', type: 'structure' },
+        { source: 'hub_frontend', target: 'node_agent_sidebar', label: 'Contiene', type: 'structure' },
+        { source: 'hub_frontend', target: 'node_editor_ui', label: 'Contiene', type: 'structure' },
+        { source: 'hub_frontend', target: 'node_session_selector', label: 'Contiene', type: 'structure' },
+        { source: 'hub_frontend', target: 'node_phaser_game', label: 'Contiene', type: 'structure' },
+        { source: 'hub_frontend', target: 'node_event_bus', label: 'Contiene', type: 'structure' },
+        { source: 'hub_frontend', target: 'node_default_layout', label: 'Contiene', type: 'structure' },
+        { source: 'hub_frontend', target: 'node_agent_mapper', label: 'Contiene', type: 'structure' },
+
+        { source: 'hub_agents', target: 'node_skill_asset_gen', label: 'Contiene Skill', type: 'structure' },
+        { source: 'hub_agents', target: 'node_process_asset_py', label: 'Contiene Script', type: 'structure' },
+
+        { source: 'hub_scripts', target: 'node_process_avatar_py', label: 'Contiene', type: 'structure' },
+        { source: 'hub_scripts', target: 'node_align_avatars_py', label: 'Contiene', type: 'structure' },
+        { source: 'hub_scripts', target: 'node_check_bbox_py', label: 'Contiene', type: 'structure' },
+
+        { source: 'hub_docs', target: 'node_doc_tecnica', label: 'Contiene', type: 'structure' },
+        { source: 'hub_docs', target: 'node_graph_2d', label: 'Contiene', type: 'structure' },
+
+        { source: 'hub_root', target: 'node_plan_multi_agente', label: 'Contiene', type: 'structure' },
+        { source: 'hub_root', target: 'node_req_general', label: 'Contiene', type: 'structure' },
+        { source: 'hub_root', target: 'node_plan_implementacion', label: 'Contiene', type: 'structure' },
+        { source: 'hub_root', target: 'node_start_bat', label: 'Contiene', type: 'structure' },
+
+        // Relaciones entre agentes
+        { source: 'agent_team_leader', target: 'agent_developer', label: 'Invoca Subagente', type: 'orchestration' },
+        { source: 'agent_team_leader', target: 'agent_designer', label: 'Invoca Subagente', type: 'orchestration' },
+        { source: 'agent_team_leader', target: 'agent_dba', label: 'Invoca Subagente', type: 'orchestration' },
+        { source: 'agent_team_leader', target: 'agent_qa', label: 'Invoca Subagente', type: 'orchestration' },
+        { source: 'agent_team_leader', target: 'agent_security', label: 'Invoca Subagente', type: 'orchestration' },
+        { source: 'agent_team_leader', target: 'agent_documenter', label: 'Invoca Subagente', type: 'orchestration' },
+
+        // Conexión del catálogo de roles con el código del proyecto
+        { source: 'node_agent_mapper', target: 'agent_developer', label: 'Mapea Textura', type: 'mapping' },
+        { source: 'node_agent_mapper', target: 'agent_team_leader', label: 'Mapea Textura', type: 'mapping' },
+        { source: 'node_agent_mapper', target: 'agent_designer', label: 'Mapea Textura', type: 'mapping' },
+        { source: 'node_parser_js', target: 'agent_team_leader', label: 'Clasifica Rol', type: 'mapping' },
+
+        // Relaciones funcionales cruzadas
+        { source: 'agent_designer', target: 'node_skill_asset_gen', label: 'Utiliza Skill', type: 'skill-use' },
+        { source: 'node_skill_asset_gen', target: 'node_process_asset_py', label: 'Ejecuta Script', type: 'execution' },
+        { source: 'node_process_asset_py', target: 'hub_frontend', label: 'Escribe PNGs', type: 'data-flow' },
+
+        { source: 'node_process_avatar_py', target: 'hub_frontend', label: 'Genera Sprites', type: 'data-flow' },
+        { source: 'node_align_avatars_py', target: 'node_avatar_js', label: 'Calibra Torso', type: 'data-flow' },
+
+        { source: 'node_watcher_js', target: 'node_parser_js', label: 'Líneas Raw', type: 'data-flow' },
+        { source: 'node_simulator_js', target: 'node_parser_js', label: 'Líneas Raw', type: 'data-flow' },
+        { source: 'node_parser_js', target: 'node_server_js', label: 'Eventos Normalizados', type: 'data-flow' },
+
+        { source: 'node_server_js', target: 'node_app_jsx', label: 'Socket.IO (AGENT_EVENT)', type: 'network' },
+        { source: 'node_agent_sidebar', target: 'node_server_js', label: 'Respuesta Humana', type: 'network' },
+
+        { source: 'node_app_jsx', target: 'node_event_bus', label: 'Emite Eventos', type: 'data-flow' },
+        { source: 'node_event_bus', target: 'node_office_scene', label: 'Despacha Acciones', type: 'data-flow' },
+
+        { source: 'node_office_scene', target: 'node_default_layout', label: 'Carga Tiles', type: 'data-flow' },
+        { source: 'node_office_scene', target: 'node_avatar_js', label: 'Instancia Avatar', type: 'data-flow' },
+        { source: 'node_avatar_js', target: 'node_agent_mapper', label: 'Consulta Estación', type: 'data-flow' },
+
+        { source: 'node_plan_multi_agente', target: 'node_parser_js', label: 'Especifica Parser', type: 'spec' },
+        { source: 'node_plan_multi_agente', target: 'node_watcher_js', label: 'Especifica Watcher', type: 'spec' },
+        { source: 'node_req_general', target: 'node_office_scene', label: 'Define Comportamiento', type: 'spec' }
+      ]
+    };
+
+    // ---------------------------------------------------------
+    // 3. GENERADOR DE TEXTURAS DE NODOS CIRCULARES LUMINOSOS
+    // (Círculos limpios con halo suave, sin cruces ni picos)
+    // ---------------------------------------------------------
+    function createStarTexture(colorHex, isHub = false) {
+      const canvas = document.createElement('canvas');
+      const size = isHub ? 128 : 64;
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      const center = size / 2;
+
+      // 1. Halo difuso circular suave
+      const grad = ctx.createRadialGradient(center, center, 0, center, center, center * 0.92);
+      grad.addColorStop(0, '#ffffff');            // Centro blanco brillante
+      grad.addColorStop(0.25, colorHex);          // Color puro y vibrante del nodo
+      grad.addColorStop(0.55, colorHex + '66');   // Halo exterior suave
+      grad.addColorStop(1, 'transparent');        // Desvanecimiento limpio
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(center, center, center * 0.92, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 2. Núcleo circular sólido interior (Sin cruces)
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(center, center, isHub ? 6.5 : 3.8, 0, Math.PI * 2);
+      ctx.fill();
+
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.minFilter = THREE.LinearFilter;
+      return texture;
+    }
+
+    // Helper para crear texto 3D nítido
+    function createLabelSprite(text, colorHex, isHub = false) {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      canvas.width = 512;
+      canvas.height = 128;
+
+      ctx.font = isHub ? 'bold 36px "Orbitron", sans-serif' : '600 30px "Rajdhani", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.shadowColor = colorHex;
+      ctx.shadowBlur = isHub ? 14 : 7;
+      ctx.fillStyle = colorHex;
+      ctx.fillText(text, 256, 64);
+
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.minFilter = THREE.LinearFilter;
+      const mat = new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false });
+      const sprite = new THREE.Sprite(mat);
+      sprite.scale.set(isHub ? 52 : 38, isHub ? 13 : 9.5, 1);
+      return sprite;
+    }
+
+    // ---------------------------------------------------------
+    // 4. APLICACIÓN THREE.JS PRINCIPAL
+    // ---------------------------------------------------------
+    function init3DMatrix() {
+      const container = document.getElementById('canvasContainer');
+      const width = container.clientWidth || window.innerWidth || 800;
+      const height = container.clientHeight || window.innerHeight || 600;
+
+      // Escena y Niebla
+      const scene = new THREE.Scene();
+      scene.fog = new THREE.FogExp2(0x030712, 0.001);
+
+      // Cámara
+      const camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 3500);
+      camera.position.set(0, 300, 520);
+
+      // Renderer
+      const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
+      renderer.setSize(width, height);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer.setClearColor(0x030712, 1);
+      container.appendChild(renderer.domElement);
+
+      // Controles de Cámara
+      let controls;
+      if (typeof THREE.OrbitControls !== 'undefined') {
+        controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.maxDistance = 1400;
+        controls.minDistance = 50;
+        controls.autoRotate = false;
+        controls.autoRotateSpeed = 0.8;
+      } else {
+        controls = { update: () => {}, target: new THREE.Vector3(0,0,0), autoRotate: false, enabled: true };
+      }
+
+      // Iluminación Cósmica
+      const ambientLight = new THREE.AmbientLight(0x0f172a, 2.5);
+      scene.add(ambientLight);
+
+      const lightCyan = new THREE.PointLight(0x06b6d4, 2.5, 950);
+      lightCyan.position.set(-200, 200, 200);
+      scene.add(lightCyan);
+
+      const lightPurple = new THREE.PointLight(0xa855f7, 2.5, 950);
+      lightPurple.position.set(200, 200, -200);
+      scene.add(lightPurple);
+
+      // Campo de Estrellas de Fondo (Puntos blancos pequeños, sin plano cartesiano)
+      const starsGeo = new THREE.BufferGeometry();
+      const starsCount = 1600;
+      const starPos = new Float32Array(starsCount * 3);
+      for (let i = 0; i < starsCount * 3; i += 3) {
+        starPos[i] = (Math.random() - 0.5) * 2600;
+        starPos[i + 1] = (Math.random() - 0.5) * 1800;
+        starPos[i + 2] = (Math.random() - 0.5) * 2600;
+      }
+      starsGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+      const starField = new THREE.Points(starsGeo, new THREE.PointsMaterial({
+        color: 0xffffff,
+        size: 0.8,
+        transparent: true,
+        opacity: 0.8,
+        blending: THREE.AdditiveBlending
+      }));
+      scene.add(starField);
+
+      // Indicador de Anillo de Selección en 3D
+      const selectRingGeo = new THREE.RingGeometry(18, 22, 32);
+      const selectRingMat = new THREE.MeshBasicMaterial({
+        color: 0x38bdf8,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.85,
+        blending: THREE.AdditiveBlending
+      });
+      const selectionRing = new THREE.Mesh(selectRingGeo, selectRingMat);
+      selectionRing.visible = false;
+      scene.add(selectionRing);
+
+      // Contenedores de Objetos
+      const nodeObjects = new Map();
+      const starSprites = new Map();
+      const labelSprites = new Map();
+      const linkObjects = [];
+      const energyPackets = [];
+
+      // 5. Instanciar Nodos como Estrellas Luminosas
+      SYSTEM_GRAPH.nodes.forEach((node, idx) => {
+        const group = new THREE.Group();
+        group.position.set(...node.pos);
+        group.userData = { nodeData: node };
+
+        // Sprite de Estrella con Destello
+        const starTexture = createStarTexture(node.color, node.isHub);
+        const starMat = new THREE.SpriteMaterial({
+          map: starTexture,
+          transparent: true,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false
+        });
+        const starSprite = new THREE.Sprite(starMat);
+        starSprite.scale.set(node.starSize, node.starSize, 1);
+        starSprite.userData = { baseSize: node.starSize, pulsePhase: idx * 0.4 };
+        group.add(starSprite);
+        starSprites.set(node.id, starSprite);
+
+        // Etiqueta 3D
+        const labelSprite = createLabelSprite(
+          node.name,
+          node.isHub ? '#38bdf8' : (node.type === 'agent' ? '#fbbf24' : '#cbd5e1'),
+          node.isHub
+        );
+        labelSprite.position.set(0, node.starSize * 0.45 + (node.isHub ? 12 : 8), 0);
+        group.add(labelSprite);
+        labelSprites.set(node.id, labelSprite);
+
+        scene.add(group);
+        nodeObjects.set(node.id, group);
+      });
+
+      // 6. Conexiones (Líneas de Constelación)
+      SYSTEM_GRAPH.links.forEach((link, idx) => {
+        const sourceObj = nodeObjects.get(link.source);
+        const targetObj = nodeObjects.get(link.target);
+        if (!sourceObj || !targetObj) return;
+
+        let lineColor = 0x334155;
+        if (link.type === 'orchestration') lineColor = 0xf59e0b;
+        else if (link.type === 'skill-use' || link.type === 'execution') lineColor = 0xec4899;
+        else if (link.type === 'network') lineColor = 0x38bdf8;
+        else if (link.type === 'data-flow') lineColor = 0x10b981;
+        else if (link.type === 'spec') lineColor = 0x818cf8;
+
+        const lineGeo = new THREE.BufferGeometry().setFromPoints([
+          sourceObj.position,
+          targetObj.position
+        ]);
+        const lineMat = new THREE.LineBasicMaterial({
+          color: lineColor,
+          transparent: true,
+          opacity: link.type === 'structure' ? 0.35 : 0.65,
+          linewidth: 1
+        });
+        const lineMesh = new THREE.Line(lineGeo, lineMat);
+        scene.add(lineMesh);
+
+        linkObjects.push({
+          id: idx,
+          mesh: lineMesh,
+          source: link.source,
+          target: link.target,
+          type: link.type,
+          label: link.label,
+          origColor: lineColor,
+          origOpacity: lineMat.opacity
+        });
+
+        // Fotones de energía en tránsito (pequeños puntos blancos discretos)
+        if (link.type !== 'structure' || Math.random() > 0.4) {
+          const packetGeo = new THREE.SphereGeometry(0.7, 6, 6);
+          const packetMat = new THREE.MeshBasicMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0.85,
+            blending: THREE.AdditiveBlending
+          });
+          const packetMesh = new THREE.Mesh(packetGeo, packetMat);
+          scene.add(packetMesh);
+
+          energyPackets.push({
+            mesh: packetMesh,
+            sourceObj: sourceObj,
+            targetObj: targetObj,
+            progress: Math.random(),
+            speed: 0.0035 + Math.random() * 0.003
+          });
+        }
+      });
+
+      // 7. Raycasting de Alta Sensibilidad para Sprites y Arrastre 3D
+      const raycaster = new THREE.Raycaster();
+      raycaster.params.Sprite = { threshold: 18 }; // Área de clic ampliada para estrellas
+      const mouse = new THREE.Vector2();
+
+      let hoveredGroup = null;
+      let selectedGroup = null;
+      let isDraggingNode = false;
+      let dragPlane = new THREE.Plane();
+      let planeIntersect = new THREE.Vector3();
+
+      // Detección de Click vs Arrastre
+      let pointerDownPos = { x: 0, y: 0 };
+      let pointerDownTime = 0;
+
+      function updateNodeLines(nodeId) {
+        linkObjects.forEach(l => {
+          if (l.source === nodeId || l.target === nodeId) {
+            const s = nodeObjects.get(l.source);
+            const t = nodeObjects.get(l.target);
+            if (s && t) {
+              const pos = l.mesh.geometry.attributes.position.array;
+              pos[0] = s.position.x; pos[1] = s.position.y; pos[2] = s.position.z;
+              pos[3] = t.position.x; pos[4] = t.position.y; pos[5] = t.position.z;
+              l.mesh.geometry.attributes.position.needsUpdate = true;
+            }
+          }
+        });
+      }
+
+      const tooltip = document.getElementById('hoverTooltip');
+      const ttBadge = document.getElementById('ttBadge');
+      const ttIcon = document.getElementById('ttIcon');
+      const ttName = document.getElementById('ttName');
+      const ttSub = document.getElementById('ttSub');
+
+      window.addEventListener('mousemove', (e) => {
+        mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+        mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+        if (isDraggingNode && selectedGroup) {
+          raycaster.setFromCamera(mouse, camera);
+          if (raycaster.ray.intersectPlane(dragPlane, planeIntersect)) {
+            selectedGroup.position.copy(planeIntersect);
+            updateNodeLines(selectedGroup.userData.nodeData.id);
+            selectionRing.position.copy(selectedGroup.position);
+          }
+          return;
+        }
+
+        raycaster.setFromCamera(mouse, camera);
+        const groups = Array.from(nodeObjects.values());
+        const intersects = raycaster.intersectObjects(groups, true);
+
+        if (intersects.length > 0) {
+          let topGroup = intersects[0].object;
+          while (topGroup.parent && !topGroup.userData.nodeData) {
+            topGroup = topGroup.parent;
+          }
+
+          if (topGroup.userData.nodeData) {
+            document.body.style.cursor = 'pointer';
+            const nodeData = topGroup.userData.nodeData;
+
+            tooltip.style.left = `${e.clientX + 16}px`;
+            tooltip.style.top = `${e.clientY + 16}px`;
+            tooltip.style.opacity = '1';
+
+            ttName.textContent = nodeData.name;
+            ttSub.textContent = nodeData.path;
+            ttIcon.textContent = nodeData.icon;
+            ttBadge.textContent = nodeData.type.toUpperCase();
+
+            if (hoveredGroup !== topGroup) {
+              hoveredGroup = topGroup;
+              highlightConnections(nodeData.id);
+            }
+            return;
+          }
+        }
+
+        document.body.style.cursor = isDraggingNode ? 'grabbing' : 'default';
+        tooltip.style.opacity = '0';
+        if (hoveredGroup && !selectedGroup) {
+          hoveredGroup = null;
+          resetHighlights();
+        }
+      });
+
+      // Pointer Down
+      window.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0) return;
+        if (e.target.closest('#inspectorPanel') || e.target.closest('header') || e.target.closest('button') || e.target.closest('input')) {
+          return;
+        }
+
+        pointerDownPos = { x: e.clientX, y: e.clientY };
+        pointerDownTime = performance.now();
+
+        raycaster.setFromCamera(mouse, camera);
+        const groups = Array.from(nodeObjects.values());
+        const intersects = raycaster.intersectObjects(groups, true);
+
+        if (intersects.length > 0) {
+          let topGroup = intersects[0].object;
+          while (topGroup.parent && !topGroup.userData.nodeData) {
+            topGroup = topGroup.parent;
+          }
+
+          if (topGroup.userData.nodeData) {
+            isDraggingNode = true;
+            controls.enabled = false;
+
+            const normal = new THREE.Vector3();
+            camera.getWorldDirection(normal).negate();
+            dragPlane.setFromNormalAndCoplanarPoint(normal, topGroup.position);
+          }
+        }
+      });
+
+      // Pointer Up (Detección certera de CLICK)
+      window.addEventListener('pointerup', (e) => {
+        const dist = Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y);
+        const time = performance.now() - pointerDownTime;
+
+        // Si el usuario movió menos de 6px, es un CLIC legítimo
+        if (dist < 6 && time < 450) {
+          if (!e.target.closest('#inspectorPanel') && !e.target.closest('header') && !e.target.closest('button') && !e.target.closest('input')) {
+            raycaster.setFromCamera(mouse, camera);
+            const groups = Array.from(nodeObjects.values());
+            const intersects = raycaster.intersectObjects(groups, true);
+
+            if (intersects.length > 0) {
+              let topGroup = intersects[0].object;
+              while (topGroup.parent && !topGroup.userData.nodeData) {
+                topGroup = topGroup.parent;
+              }
+              if (topGroup.userData.nodeData) {
+                // SELECCIÓN Y APERTURA INMEDIATA DEL PANEL
+                selectNode(topGroup.userData.nodeData.id);
+              }
+            }
+          }
+        }
+
+        isDraggingNode = false;
+        controls.enabled = true;
+      });
+
+      // 8. Resaltado de Conexiones
+      function highlightConnections(nodeId) {
+        const connectedNodeIds = new Set([nodeId]);
+
+        linkObjects.forEach(l => {
+          if (l.source === nodeId || l.target === nodeId) {
+            connectedNodeIds.add(l.source);
+            connectedNodeIds.add(l.target);
+            l.mesh.material.opacity = 1.0;
+            l.mesh.material.color.setHex(0x38bdf8);
+          } else {
+            l.mesh.material.opacity = 0.1;
+          }
+        });
+
+        nodeObjects.forEach((group, id) => {
+          const isConnected = connectedNodeIds.has(id);
+          const star = starSprites.get(id);
+          const sprite = labelSprites.get(id);
+
+          if (star && star.material) {
+            star.material.opacity = isConnected ? 1.0 : 0.35;
+          }
+          if (sprite && sprite.material) {
+            sprite.material.opacity = isConnected ? 1.0 : 0.35;
+          }
+        });
+      }
+
+      function resetHighlights() {
+        linkObjects.forEach(l => {
+          l.mesh.material.opacity = l.origOpacity;
+          l.mesh.material.color.setHex(l.origColor);
+        });
+
+        nodeObjects.forEach((group, id) => {
+          const star = starSprites.get(id);
+          const sprite = labelSprites.get(id);
+          if (star && star.material) {
+            star.material.opacity = 1.0;
+          }
+          if (sprite && sprite.material) {
+            sprite.material.opacity = 1.0;
+          }
+        });
+      }
+
+      // 9. Inspector Lateral (Slide-Over con Inline Styles directos)
+      const inspectorPanel = document.getElementById('inspectorPanel');
+      const inspNodeName = document.getElementById('inspNodeName');
+      const inspCategoryBadge = document.getElementById('inspCategoryBadge');
+      const inspIconBox = document.getElementById('inspIconBox');
+      const inspPath = document.getElementById('inspPath');
+      const inspDescription = document.getElementById('inspDescription');
+      const inspTags = document.getElementById('inspTags');
+      const inspInboundList = document.getElementById('inspInboundList');
+      const inspOutboundList = document.getElementById('inspOutboundList');
+
+      function selectNode(nodeId) {
+        const node = SYSTEM_GRAPH.nodes.find(n => n.id === nodeId);
+        const group = nodeObjects.get(nodeId);
+        if (!node || !group) return;
+
+        selectedGroup = group;
+
+        // Actualizar datos del panel
+        inspNodeName.textContent = node.name;
+        inspIconBox.textContent = node.icon;
+        inspPath.textContent = node.path;
+        inspDescription.textContent = node.summary;
+
+        inspCategoryBadge.textContent = node.isHub ? 'CARPETA PRINCIPAL' : node.type.toUpperCase();
+        inspCategoryBadge.style.color = node.color;
+        inspCategoryBadge.style.borderColor = `${node.color}88`;
+
+        // Features
+        inspTags.innerHTML = '';
+        node.features.forEach(f => {
+          const span = document.createElement('span');
+          span.className = 'px-2 py-0.5 rounded-md text-[11px] font-mono-code bg-slate-900 border border-slate-700 text-slate-300';
+          span.textContent = f;
+          inspTags.appendChild(span);
+        });
+
+        // Entradas
+        inspInboundList.innerHTML = '';
+        const inLinks = SYSTEM_GRAPH.links.filter(l => l.target === nodeId);
+        if (inLinks.length === 0) {
+          inspInboundList.innerHTML = '<span class="text-slate-500 italic text-[11px]">Sin dependencias de entrada directa</span>';
+        } else {
+          inLinks.forEach(l => {
+            const srcNode = SYSTEM_GRAPH.nodes.find(n => n.id === l.source);
+            if (srcNode) inspInboundList.appendChild(createRelButton(srcNode, l.label, 'emerald'));
+          });
+        }
+
+        // Salidas
+        inspOutboundList.innerHTML = '';
+        const outLinks = SYSTEM_GRAPH.links.filter(l => l.source === nodeId);
+        if (outLinks.length === 0) {
+          inspOutboundList.innerHTML = '<span class="text-slate-500 italic text-[11px]">Nodo terminal (hoja)</span>';
+        } else {
+          outLinks.forEach(l => {
+            const tgtNode = SYSTEM_GRAPH.nodes.find(n => n.id === l.target);
+            if (tgtNode) inspOutboundList.appendChild(createRelButton(tgtNode, l.label, 'sky'));
+          });
+        }
+
+        // ABRIR PANEL LATERAL (Garantizado con estilos directos)
+        inspectorPanel.style.transform = 'translateX(0)';
+        inspectorPanel.style.opacity = '1';
+        inspectorPanel.style.pointerEvents = 'auto';
+
+        // Resaltar anillo sobre la estrella seleccionada
+        selectionRing.position.copy(group.position);
+        selectionRing.scale.setScalar(node.isHub ? 1.5 : 1.0);
+        selectionRing.lookAt(camera.position);
+        selectionRing.visible = true;
+
+        highlightConnections(nodeId);
+      }
+
+      function createRelButton(targetNode, relationLabel, colorTheme) {
+        const btn = document.createElement('button');
+        btn.className = `w-full text-left p-2 rounded-xl bg-slate-950/70 hover:bg-slate-900 border border-slate-800 hover:border-${colorTheme}-500/50 flex items-center justify-between text-xs transition-all group`;
+        btn.innerHTML = `
+          <div class="flex items-center gap-2 truncate">
+            <span class="text-base">${targetNode.icon}</span>
+            <span class="font-medium text-slate-200 group-hover:text-cyan-300 truncate">${targetNode.name}</span>
+          </div>
+          <span class="text-[10px] text-slate-500 group-hover:text-${colorTheme}-400 font-mono-code">${relationLabel}</span>
+        `;
+        btn.onclick = () => {
+          selectNode(targetNode.id);
+          focusCameraOnNode(targetNode.id);
+        };
+        return btn;
+      }
+
+      document.getElementById('closeInspectorBtn').onclick = () => {
+        inspectorPanel.style.transform = 'translateX(115%)';
+        inspectorPanel.style.opacity = '0';
+        inspectorPanel.style.pointerEvents = 'none';
+        selectedGroup = null;
+        selectionRing.visible = false;
+        resetHighlights();
+      };
+
+      document.getElementById('copyPathBtn').onclick = () => {
+        const pathText = inspPath.textContent;
+        navigator.clipboard.writeText(pathText).then(() => {
+          const btn = document.getElementById('copyPathBtn');
+          btn.innerHTML = '<span class="text-emerald-400 font-bold text-xs">✓</span>';
+          setTimeout(() => {
+            btn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>';
+          }, 1500);
+        });
+      };
+
+      function focusCameraOnNode(nodeId) {
+        const group = nodeObjects.get(nodeId);
+        if (!group) return;
+
+        const targetPos = group.position.clone();
+        const offset = new THREE.Vector3(0, 45, 140);
+        const camTargetPos = targetPos.clone().add(offset);
+
+        controls.autoRotate = false;
+        document.getElementById('rotateLed').className = 'w-2 h-2 rounded-full bg-slate-500';
+
+        let startTime = performance.now();
+        const duration = 800;
+        const startCamPos = camera.position.clone();
+        const startTarget = (controls.target || new THREE.Vector3()).clone();
+
+        function animateFocus(now) {
+          const elapsed = now - startTime;
+          const t = Math.min(elapsed / duration, 1.0);
+          const ease = 0.5 - Math.cos(t * Math.PI) / 2;
+
+          camera.position.lerpVectors(startCamPos, camTargetPos, ease);
+          if (controls.target) controls.target.lerpVectors(startTarget, targetPos, ease);
+          controls.update();
+
+          if (t < 1.0) requestAnimationFrame(animateFocus);
+        }
+        requestAnimationFrame(animateFocus);
+      }
+
+      document.getElementById('focusNodeBtn').onclick = () => {
+        if (selectedGroup) {
+          focusCameraOnNode(selectedGroup.userData.nodeData.id);
+        }
+      };
+
+      // 10. Presets de Cámara y Filtros
+      const rotateBtn = document.getElementById('camAutoRotateBtn');
+      const rotateLed = document.getElementById('rotateLed');
+      rotateBtn.onclick = () => {
+        controls.autoRotate = !controls.autoRotate;
+        if (controls.autoRotate) {
+          rotateLed.className = 'w-2 h-2 rounded-full bg-cyan-400 shadow-[0_0_8px_#06b6d4]';
+        } else {
+          rotateLed.className = 'w-2 h-2 rounded-full bg-slate-500';
+        }
+      };
+
+      document.getElementById('camIsoBtn').onclick = () => {
+        if (controls.target) controls.target.set(0, 0, 0);
+        camera.position.set(260, 240, 400);
+        controls.update();
+      };
+
+      document.getElementById('camTopBtn').onclick = () => {
+        if (controls.target) controls.target.set(0, 0, 0);
+        camera.position.set(0, 640, 10);
+        controls.update();
+      };
+
+      document.getElementById('camResetBtn').onclick = () => {
+        if (controls.target) controls.target.set(0, 0, 0);
+        camera.position.set(0, 300, 520);
+        controls.autoRotate = false;
+        rotateLed.className = 'w-2 h-2 rounded-full bg-slate-500';
+        controls.update();
+      };
+
+      document.querySelectorAll('.cat-pill').forEach(pill => {
+        pill.onclick = () => {
+          document.querySelectorAll('.cat-pill').forEach(p => {
+            p.classList.remove('border-cyan-400', 'bg-cyan-500/20', 'text-cyan-300', 'shadow-[0_0_10px_rgba(6,182,212,0.3)]');
+            p.classList.add('border-slate-700', 'bg-slate-900/60', 'text-slate-400');
+          });
+          pill.classList.remove('border-slate-700', 'bg-slate-900/60', 'text-slate-400');
+          pill.classList.add('border-cyan-400', 'bg-cyan-500/20', 'text-cyan-300', 'shadow-[0_0_10px_rgba(6,182,212,0.3)]');
+
+          const cat = pill.getAttribute('data-cat');
+          filterNodes(cat, document.getElementById('searchInput').value.trim());
+        };
+      });
+
+      const searchInput = document.getElementById('searchInput');
+      searchInput.addEventListener('input', (e) => {
+        const q = e.target.value.toLowerCase().trim();
+        const activeCat = document.querySelector('.cat-pill.border-cyan-400')?.getAttribute('data-cat') || 'all';
+        filterNodes(activeCat, q);
+
+        if (q.length > 2) {
+          const found = SYSTEM_GRAPH.nodes.find(n => n.name.toLowerCase().includes(q) || n.path.toLowerCase().includes(q));
+          if (found) {
+            selectNode(found.id);
+          }
+        }
+      });
+
+      function filterNodes(category, query) {
+        SYSTEM_GRAPH.nodes.forEach(node => {
+          const group = nodeObjects.get(node.id);
+          const sprite = labelSprites.get(node.id);
+          if (!group) return;
+
+          const matchesCat = (category === 'all' || node.type === category || (category === 'folder' && node.isHub));
+          const matchesQuery = !query || 
+            node.name.toLowerCase().includes(query) ||
+            node.path.toLowerCase().includes(query) ||
+            node.summary.toLowerCase().includes(query) ||
+            node.features.some(f => f.toLowerCase().includes(query));
+
+          const visible = matchesCat && matchesQuery;
+          group.visible = visible;
+          if (sprite) sprite.visible = visible;
+        });
+
+        linkObjects.forEach(l => {
+          const srcGroup = nodeObjects.get(l.source);
+          const tgtGroup = nodeObjects.get(l.target);
+          l.mesh.visible = (srcGroup && tgtGroup && srcGroup.visible && tgtGroup.visible);
+        });
+      }
+
+      // 11. Bucle de Renderizado con Pulso Estelar (60 FPS)
+      const clock = new THREE.Clock();
+
+      function animate() {
+        requestAnimationFrame(animate);
+
+        const elapsed = clock.getElapsedTime();
+
+        // Rotación sutil y pausada del fondo de estrellas
+        starField.rotation.y = elapsed * 0.005;
+
+        // Pulso sutil de brillo en las estrellas
+        starSprites.forEach(sprite => {
+          const base = sprite.userData.baseSize;
+          const phase = sprite.userData.pulsePhase || 0;
+          const scaleFactor = 1.0 + 0.07 * Math.sin(elapsed * 2.5 + phase);
+          sprite.scale.set(base * scaleFactor, base * scaleFactor, 1);
+        });
+
+        // Rotar el anillo de selección si está visible
+        if (selectionRing.visible) {
+          selectionRing.rotation.z += 0.02;
+          selectionRing.lookAt(camera.position);
+        }
+
+        // Movimiento de fotones de energía
+        energyPackets.forEach(p => {
+          p.progress += p.speed;
+          if (p.progress > 1.0) p.progress = 0;
+          p.mesh.position.lerpVectors(p.sourceObj.position, p.targetObj.position, p.progress);
+        });
+
+        controls.update();
+        renderer.render(scene, camera);
+      }
+
+      animate();
+
+      window.addEventListener('resize', () => {
+        const w = container.clientWidth || window.innerWidth;
+        const h = container.clientHeight || window.innerHeight;
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+        renderer.setSize(w, h);
+      });
+
+      // Ocultar pantalla de carga
+      const loader = document.getElementById('loadingStatus');
+      if (loader) {
+        loader.style.opacity = '0';
+        setTimeout(() => loader.remove(), 350);
+      }
+
+      // Iniciar con todos los nodos iluminados
+      resetHighlights();
+    }
+
+    // Inicialización al cargar la página
+    window.addEventListener('DOMContentLoaded', async () => {
+      try {
+        await ensureDependencies();
+        init3DMatrix();
+      } catch (err) {
+        console.error('Error al iniciar Matrix 3D:', err);
+        const loader = document.getElementById('loadingStatus');
+        if (loader) {
+          loader.innerHTML = `
+            <div class="border-glow p-6 rounded-2xl text-center max-w-md bg-slate-900 text-red-400">
+              <h2 class="font-scifi font-bold text-base mb-2">Error de Inicialización</h2>
+              <p class="text-xs text-slate-300 font-sans mb-3">${err.message}</p>
+              <p class="text-[11px] text-slate-400 font-mono-code">Asegúrate de que la carpeta 'vendor/' esté junto a este archivo o de contar con conexión a internet para descargar Three.js.</p>
+            </div>
+          `;
+        }
+      }
+    });
+  </script>
+</body>
+</html>

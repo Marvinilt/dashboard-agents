@@ -12,22 +12,22 @@ export const ROLE_DEFINITIONS = {
 
 export function mapSubagentRole(typeName = '', roleStr = '') {
   const text = `${typeName} ${roleStr}`.toLowerCase();
-  if (text.includes('disen') || text.includes('design') || text.match(/\bux\b/) || text.match(/\bui\b/)) {
+  if (text.includes('disen') || text.includes('design') || text.match(/\b(ux|ui)\b/)) {
     return ROLE_DEFINITIONS.designer;
   }
-  if (text.includes('dba') || text.includes('base') || text.includes('data')) {
+  if (text.match(/\bdba\b/) || text.match(/\bdatabase\b/) || text.includes('base de datos') || text.match(/\b(sql|postgres|postgresql|mysql)\b/)) {
     return ROLE_DEFINITIONS.dba;
   }
-  if (text.includes('desarroll') || text.includes('dev') || text.includes('stack')) {
+  if (text.includes('desarroll') || text.match(/\b(dev|developer|fullstack|frontend|backend)\b/)) {
     return ROLE_DEFINITIONS.developer;
   }
-  if (text.match(/\bqa\b/) || text.includes('test') || text.includes('sdet') || text.includes('calidad')) {
+  if (text.match(/\bqa\b/) || text.includes('sdet') || text.includes('calidad') || text.match(/\btest(er|ing)?\b/)) {
     return ROLE_DEFINITIONS.qa_tester;
   }
-  if (text.includes('segur') || text.includes('audit') || text.includes('sec') || text.includes('hacker')) {
+  if (text.includes('segur') || text.match(/\b(sec|security|audit|hacker)\b/)) {
     return ROLE_DEFINITIONS.security;
   }
-  if (text.includes('doc') || text.includes('escrit') || text.includes('redact')) {
+  if (text.includes('documen') || text.includes('escrit') || text.includes('redact') || text.includes('changelog')) {
     return ROLE_DEFINITIONS.documenter;
   }
   return {
@@ -77,7 +77,10 @@ export function parseTranscriptLine(lineStr, options = {}) {
 
     if (typeof raw.content === 'string') {
       const content = raw.content;
-      const lower = content.toLowerCase();
+
+      // Extraer el remitente del mensaje si existe en el formato Antigravity: sender=...
+      const senderMatch = content.match(/sender=([^\s]+)/i);
+      const sender = senderMatch ? senderMatch[1] : null;
 
       // Si este archivo pertenece a un subagente dedicado, mantener su identidad original
       if (options.agentId && options.agentId !== 'team_leader') {
@@ -85,42 +88,74 @@ export function parseTranscriptLine(lineStr, options = {}) {
         agentRole = options.agentRole || agentRole;
         agentName = options.agentName || agentName;
         detailMessage = 'Notificación de sistema para agente';
-      } else if (lower.includes('diseñador') || lower.includes('ux') || lower.includes('design_report')) {
-        agentRole = 'designer';
-        agentId = 'agent_designer';
-        agentName = 'UI/UX Designer';
-        detailMessage = 'UI/UX Designer entregó propuesta visual y especificaciones';
-      } else if (lower.includes('dba') || lower.includes('base de datos') || lower.includes('postgresql') || lower.includes('dba_report')) {
-        agentRole = 'dba';
-        agentId = 'agent_dba';
-        agentName = 'Arquitecto DBA';
-        detailMessage = 'DBA completó modelo relacional y scripts de migración';
-      } else if (lower.includes('qa') || lower.includes('sdet') || lower.includes('aseguramiento de calidad') || lower.includes('qa_report')) {
-        agentRole = 'qa_tester';
-        agentId = 'agent_qa';
-        agentName = 'QA SDET';
-        detailMessage = 'QA reportó resultados de pruebas y cobertura de calidad';
-      } else if (lower.includes('seguridad') || lower.includes('hacker') || lower.includes('security_audit') || lower.includes('idor')) {
-        agentRole = 'security';
-        agentId = 'agent_security';
-        agentName = 'Auditor Seguridad';
-        detailMessage = 'Auditor de Seguridad finalizó revisión de vulnerabilidades';
-      } else if (lower.includes('documentador') || lower.includes('documenter') || lower.includes('document') || lower.includes('docs') || lower.includes('dercas') || lower.includes('changelog') || lower.includes('documentación')) {
-        agentRole = 'documenter';
-        agentId = 'agent_documenter';
-        agentName = 'Documentador Técnico';
-        detailMessage = 'Documentador actualizó manuales y especificaciones oficiales';
-      } else if (lower.includes('desarrollador') || lower.includes('dev_report') || lower.includes('feature/epic') || lower.includes('pull request')) {
-        agentRole = 'developer';
-        agentId = 'agent_developer';
-        agentName = 'Senior Developer';
-        detailMessage = 'Desarrollador finalizó implementación de componentes y lógica';
-      } else {
-        // Tarea en segundo plano del Team Leader
+      } else if (sender && sender.includes('/task-')) {
+        // Tarea o comando en segundo plano ejecutado por el Team Leader (ej: run_command, scripts, etc.)
         agentId = 'team_leader';
         agentRole = 'team_leader';
         agentName = 'Team Leader';
-        detailMessage = 'Comando o tarea en segundo plano finalizada';
+
+        const taskMatch = content.match(/Task id\s*"([^"]+)"\s*(finished with result|was canceled|failed)/i);
+        if (taskMatch) {
+          const taskName = taskMatch[1].split('/').pop();
+          const action = taskMatch[2].toLowerCase().includes('cancel')
+            ? 'cancelada'
+            : (taskMatch[2].toLowerCase().includes('fail') ? 'falló' : 'completada');
+          detailMessage = `Tarea en segundo plano (${taskName}) ${action}`;
+        } else {
+          detailMessage = 'Comando o tarea en segundo plano finalizada';
+        }
+      } else if (sender && options.subagentsByUuid && options.subagentsByUuid.has(sender)) {
+        // Mensaje enviado formalmente por un subagente conocido hacia el Team Leader
+        const subInfo = options.subagentsByUuid.get(sender);
+        agentId = subInfo.agentId;
+        agentRole = subInfo.agentRole;
+        agentName = subInfo.agentName;
+
+        const contentIdx = content.indexOf('content=');
+        let realMsg = contentIdx !== -1 ? content.slice(contentIdx + 8) : content;
+        realMsg = realMsg.replace(/<\/SYSTEM_MESSAGE>[\s\S]*$/i, '').trim();
+        const firstLine = realMsg.split('\n')[0].trim().slice(0, 500);
+        detailMessage = `${subInfo.agentName}: ${firstLine || 'Reporte de subagente'}`;
+      } else if (sender && sender !== 'system' && !sender.includes('/task-')) {
+        // Remitente UUID no registrado previamente pero explícito (ej. sesiones de prueba o demo legacy)
+        const lower = content.toLowerCase();
+        if (lower.includes('dba_report.md') || lower.includes('dba_report')) {
+          agentRole = 'dba';
+          agentId = 'agent_dba';
+          agentName = 'Arquitecto DBA';
+          detailMessage = 'Arquitecto DBA entregó reporte de base de datos';
+        } else if (lower.includes('design_report.md') || lower.includes('design_report')) {
+          agentRole = 'designer';
+          agentId = 'agent_designer';
+          agentName = 'UI/UX Designer';
+          detailMessage = 'UI/UX Designer entregó propuesta visual y especificaciones';
+        } else if (lower.includes('qa_report.md') || lower.includes('qa_report')) {
+          agentRole = 'qa_tester';
+          agentId = 'agent_qa';
+          agentName = 'QA SDET';
+          detailMessage = 'QA reportó resultados de pruebas y cobertura de calidad';
+        } else if (lower.includes('security_audit.md') || lower.includes('security_audit')) {
+          agentRole = 'security';
+          agentId = 'agent_security';
+          agentName = 'Auditor Seguridad';
+          detailMessage = 'Auditor de Seguridad finalizó revisión de vulnerabilidades';
+        } else if (lower.includes('dev_report.md') || lower.includes('dev_report')) {
+          agentRole = 'developer';
+          agentId = 'agent_developer';
+          agentName = 'Senior Developer';
+          detailMessage = 'Desarrollador finalizó implementación de componentes y lógica';
+        } else {
+          agentId = 'team_leader';
+          agentRole = 'team_leader';
+          agentName = 'Team Leader';
+          detailMessage = 'Mensaje de coordinación del sistema';
+        }
+      } else {
+        // Cualquier otro mensaje del sistema general pertenece al Team Leader
+        agentId = 'team_leader';
+        agentRole = 'team_leader';
+        agentName = 'Team Leader';
+        detailMessage = 'Mensaje del sistema';
       }
     }
   }
@@ -129,7 +164,7 @@ export function parseTranscriptLine(lineStr, options = {}) {
   if (type === 'PLANNER_RESPONSE') {
     if (raw.thinking) {
       state = 'THINKING';
-      detailMessage = raw.thinking.slice(0, 150) + (raw.thinking.length > 150 ? '...' : '');
+      detailMessage = raw.thinking.slice(0, 500) + (raw.thinking.length > 500 ? '...' : '');
     }
 
     if (Array.isArray(raw.tool_calls) && raw.tool_calls.length > 0) {
@@ -162,7 +197,7 @@ export function parseTranscriptLine(lineStr, options = {}) {
               role: mapped.role,
               name: mapped.name,
               typeName: s.TypeName,
-              rolePrompt: s.Prompt ? String(s.Prompt).slice(0, 120) : ''
+              rolePrompt: s.Prompt ? String(s.Prompt).slice(0, 200) : ''
             };
           });
 
@@ -217,7 +252,7 @@ export function parseTranscriptLine(lineStr, options = {}) {
   let cleanSnippet = raw.content ? String(raw.content) : null;
   if (cleanSnippet) {
     cleanSnippet = cleanSnippet.replace(/Created At:.*?\n/g, '').replace(/Completed At:.*?\n/g, '').trim();
-    cleanSnippet = cleanSnippet.slice(0, 200); // mantener corto
+    cleanSnippet = cleanSnippet.slice(0, 500); // ampliar hasta 500 caracteres
   }
 
   return {

@@ -134,6 +134,10 @@ export class OfficeScene extends Phaser.Scene {
       gameEvents.emit('AVATAR_HOVER_OUT', data);
     });
 
+    this.scale.on('resize', () => {
+      this._cachedCanvasRect = null;
+    });
+
     // Controles de Cámara para Modo Editor
     this.editorKeys = this.input.keyboard.addKeys('W,A,S,D');
     this.cursors = this.input.keyboard.createCursorKeys();
@@ -1096,10 +1100,12 @@ export class OfficeScene extends Phaser.Scene {
     if (!avatar) {
       const startPx = this.gridToPx(this.doorGridPos.col, this.doorGridPos.row);
       avatar = new Avatar(this, startPx.x, startPx.y, agentId, agentRole);
-      avatar.lastSimActivity = eventTime || this.currentSimTime || Date.now();
+      const initialTime = eventTime || this.currentSimTime || Date.now();
+      avatar.startTime = initialTime;
+      avatar.lastSimActivity = initialTime;
       avatar.lastLogMessage = logMsg;
-      avatar.lastLogTime = eventTime || this.currentSimTime || Date.now();
-      if (event.agentName) avatar.agentName = event.agentName;
+      avatar.lastLogTime = initialTime;
+      if (event.agentName) avatar.setAgentName(event.agentName);
       this.agents.set(agentId, avatar);
 
       if (isJumpReplay && avatar.assignedDesk) {
@@ -1108,8 +1114,13 @@ export class OfficeScene extends Phaser.Scene {
       }
     } else {
       avatar.lastLogMessage = logMsg;
-      avatar.lastLogTime = eventTime || this.currentSimTime || Date.now();
-      if (event.agentName) avatar.agentName = event.agentName;
+      const effectiveTime = eventTime || this.currentSimTime || Date.now();
+      avatar.lastLogTime = effectiveTime;
+      avatar.lastSimActivity = effectiveTime;
+      avatar.lastRealActivity = Date.now();
+      if (event.agentName && avatar.agentName !== event.agentName) {
+        avatar.setAgentName(event.agentName);
+      }
     }
 
     if (avatar && avatar.active) {
@@ -1128,9 +1139,9 @@ export class OfficeScene extends Phaser.Scene {
     const DESPAWN_THRESHOLD = 1800000; // 30 minutos sin logs = irse de la oficina
     
     for (const [id, avatar] of this.agents.entries()) {
-      const inactiveTime = this.currentSimTime - avatar.lastSimActivity;
+      const { diffMs, minutesWaiting } = avatar.getInactivityMetrics ? avatar.getInactivityMetrics() : { diffMs: this.currentSimTime - avatar.lastSimActivity, minutesWaiting: 0 };
       
-      if (inactiveTime > DESPAWN_THRESHOLD) {
+      if (diffMs > DESPAWN_THRESHOLD) {
         if (!avatar.isDespawning) {
           avatar.isDespawning = true;
           const doorPx = this.gridToPx(this.doorGridPos.col, this.doorGridPos.row);
@@ -1138,7 +1149,7 @@ export class OfficeScene extends Phaser.Scene {
             this.agents.delete(id);
           });
         }
-      } else if (inactiveTime > REST_THRESHOLD) {
+      } else if (minutesWaiting >= 5 || diffMs > REST_THRESHOLD) {
         if (!avatar.isDespawning && avatar.fsm.state !== 'RESTING') {
           // Forzar descanso
           avatar.handleTelemetryState('RESTING', avatar.lastSimActivity, true);
@@ -1148,26 +1159,27 @@ export class OfficeScene extends Phaser.Scene {
   }
 
   checkInactivityRealtime() {
+    const now = Date.now();
+    if (this._lastRealtimeCheck && now - this._lastRealtimeCheck < 1000) return;
+    this._lastRealtimeCheck = now;
+
     const REALTIME_REST_THRESHOLD = 300000; // 5 minutos en tiempo real sin logs
     const REALTIME_DESPAWN_THRESHOLD = 1800000; // 30 minutos en tiempo real sin logs
-    const now = Date.now();
 
     for (const [id, avatar] of this.agents.entries()) {
-      if (avatar.lastRealActivity) {
-        const inactiveTime = now - avatar.lastRealActivity;
-        
-        if (inactiveTime > REALTIME_DESPAWN_THRESHOLD) {
-          if (!avatar.isDespawning) {
-            avatar.isDespawning = true;
-            const doorPx = this.gridToPx(this.doorGridPos.col, this.doorGridPos.row);
-            avatar.despawn(doorPx, () => {
-              this.agents.delete(id);
-            });
-          }
-        } else if (inactiveTime > REALTIME_REST_THRESHOLD) {
-          if (!avatar.isDespawning && avatar.fsm.state !== 'RESTING') {
-            avatar.handleTelemetryState('RESTING', avatar.lastSimActivity, true);
-          }
+      const { diffMs, minutesWaiting } = avatar.getInactivityMetrics ? avatar.getInactivityMetrics() : { diffMs: (avatar.lastRealActivity ? now - avatar.lastRealActivity : 0), minutesWaiting: 0 };
+      
+      if (diffMs > REALTIME_DESPAWN_THRESHOLD) {
+        if (!avatar.isDespawning) {
+          avatar.isDespawning = true;
+          const doorPx = this.gridToPx(this.doorGridPos.col, this.doorGridPos.row);
+          avatar.despawn(doorPx, () => {
+            this.agents.delete(id);
+          });
+        }
+      } else if (minutesWaiting >= 5 || diffMs > REALTIME_REST_THRESHOLD) {
+        if (!avatar.isDespawning && avatar.fsm.state !== 'RESTING') {
+          avatar.handleTelemetryState('RESTING', avatar.lastSimActivity, true);
         }
       }
     }
