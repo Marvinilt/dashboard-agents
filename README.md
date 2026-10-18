@@ -1,6 +1,6 @@
 # Gamified Agent Observability Dashboard
 
-![Version](https://img.shields.io/badge/version-1.5.0-blue.svg)
+![Version](https://img.shields.io/badge/version-1.6.0-blue.svg)
 ![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-green.svg)
 ![React](https://img.shields.io/badge/react-19.x-61dafb.svg)
 ![Phaser](https://img.shields.io/badge/phaser-3.x-red.svg)
@@ -14,9 +14,12 @@ El **Gamified Agent Observability Dashboard** es un sistema innovador de monitor
 
 ### ✨ Características Principales
 * **Avatar State Machine & Procedural Animations:** Representación visual de estados: SPAWNING (entrando), WORKING (tecleando en escritorio), WAITING_INPUT (globo de diálogo `⚠️`), IDLE (descanso en lounge con `💤`), DESPAWNING (salida por elevador). Animaciones procedurales con squash & stretch, partículas de pisadas y caminata direccional 4-vías.
+* **Orientación Contextual de Puestos de Trabajo:** Soporte y respeto dinámico a la orientación asignada al asiento (`up`, `down`, etc.), alternando entre posturas frontales de trabajo o vistas de espaldas según el diseño del escritorio.
+* **Gestión Visual de Inactividad y Espera:** Transición a estado de espera a partir de 1 minuto sin actividad con icono de reloj e indicador de minutos; preservación del contador de tiempo acumulado al desplazarse al lounge a descansar tras 5 minutos.
+* **Modal Flotante de Telemetría (Hover HUD):** Tooltip interactivo de alto rendimiento (`z-[200]`) con hora de inicio persistente, tiempo total de trabajo, hora del último evento y contenedor de descripción con altura estática (4 líneas) para evitar parpadeos dimensionales.
+* **Feed Lateral de Logs con Tooltip Extendido:** Inspección en profundidad de hasta 500 caracteres por cada log en la barra lateral con argumentos de herramientas, comandos de terminal ejecutados y archivos modificados.
 * **Catálogo de Avatares y Variantes por Rol:** Spritesheets dedicados y procesados con IA para Tech Lead, Developer, QA Tester, Diseñadora, DBA Architect, Security Specialist y Documenter, con posturas contextuales (cuerpo completo en lounge vs. postura de trabajo en escritorio).
-* **Hover HUD Interactivo:** Tooltip interactivo al pasar el cursor sobre cualquier avatar mostrando nombre, rol, tiempo de espera en minutos desde su última actividad y su registro de log más reciente.
-* **Soporte Multi-Agente Recursivo:** Auto-descubrimiento y enganche a los logs de subagentes generados dinámicamente en tiempo real.
+* **Soporte Multi-Agente Recursivo y Robusto:** Auto-descubrimiento y enganche a los logs de subagentes generados dinámicamente en tiempo real, con discriminación estricta de tareas en background para evitar falsos positivos.
 * **Motor Dual de Reproducción:**
   * **Simulador Histórico:** Reproducción de sesiones pasadas con acelerador de tiempo (1x a 10x) y barra de tiempo scrubbable.
   * **Live Watcher:** Monitoreo en tiempo real reaccionando a los archivos de log directamente en disco.

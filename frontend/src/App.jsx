@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { io } from 'socket.io-client';
 import { PhaserGame } from './components/PhaserGame';
 import { SessionSelector } from './components/SessionSelector';
@@ -18,6 +18,29 @@ const ROLE_BADGES = {
   documenter: { name: 'Documentador', color: 'bg-purple-500/20 text-purple-300 border-purple-500/40' },
   document: { name: 'Documentador', color: 'bg-purple-500/20 text-purple-300 border-purple-500/40' },
   docs: { name: 'Documentador', color: 'bg-purple-500/20 text-purple-300 border-purple-500/40' },
+};
+
+const formatTime = (ts) => {
+  if (!ts) return '--:--:--';
+  const d = new Date(ts);
+  if (isNaN(d.getTime())) return '--:--:--';
+  return d.toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+};
+
+const formatDuration = (ms) => {
+  if (!ms || ms < 0) return '0s';
+  const totalSeconds = Math.floor(ms / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    return `${hours}h ${minutes}m ${seconds}s`;
+  }
+  if (minutes > 0) {
+    return `${minutes}m ${seconds}s`;
+  }
+  return `${seconds}s`;
 };
 
 export function App() {
@@ -310,6 +333,45 @@ export function App() {
     || hoveredAvatar?.lastLogMessage 
     || 'Sin actividad registrada';
 
+  const hoveredStartTime = hoveredAvatar?.startTime
+    || (agentStats[hoveredAvatar?.agentId]?.startTime ? new Date(agentStats[hoveredAvatar.agentId].startTime).getTime() : null);
+
+  const hoveredLastLogTime = (hoveredLatestLog?.timestamp ? new Date(hoveredLatestLog.timestamp).getTime() : null)
+    || hoveredAvatar?.lastLogTime;
+
+  const hoveredWorkDurationMs = (hoveredStartTime && hoveredLastLogTime)
+    ? Math.max(0, hoveredLastLogTime - hoveredStartTime)
+    : (hoveredAvatar?.workDurationMs || 0);
+
+  const handleGameReady = useCallback((scene) => {
+    officeSceneRef.current = scene;
+  }, []);
+
+  const handleAgentSelect = useCallback((agent) => {
+    setSelectedAgent((prev) => (prev && prev.agentId === agent.agentId ? null : agent));
+  }, []);
+
+  const handleAvatarHover = useCallback((data) => {
+    setHoveredAvatar((prev) => {
+      if (!prev) return data;
+      if (
+        prev.agentId === data.agentId &&
+        prev.state === data.state &&
+        prev.lastLogMessage === data.lastLogMessage &&
+        prev.lastLogTime === data.lastLogTime &&
+        Math.abs(prev.clientX - data.clientX) < 1 &&
+        Math.abs(prev.clientY - data.clientY) < 1
+      ) {
+        return prev;
+      }
+      return data;
+    });
+  }, []);
+
+  const handleAvatarHoverOut = useCallback((data) => {
+    setHoveredAvatar((prev) => (prev?.agentId === data.agentId ? null : prev));
+  }, []);
+
   return (
     <div className="h-screen w-screen bg-slate-950 text-slate-100 flex overflow-hidden">
       {/* Panel Lateral con Telemetría al dar Clic en Avatar (Empuja el sitio hacia la derecha) */}
@@ -410,18 +472,10 @@ export function App() {
               isMaximized ? 'h-full min-h-0' : 'h-[512px]'
             }`}>
               <PhaserGame
-                onGameReady={(scene) => {
-                  officeSceneRef.current = scene;
-                }}
-                onAgentSelect={(agent) => {
-                  setSelectedAgent((prev) => (prev && prev.agentId === agent.agentId ? null : agent));
-                }}
-                onAvatarHover={(data) => {
-                  setHoveredAvatar(data);
-                }}
-                onAvatarHoverOut={(data) => {
-                  setHoveredAvatar((prev) => (prev?.agentId === data.agentId ? null : prev));
-                }}
+                onGameReady={handleGameReady}
+                onAgentSelect={handleAgentSelect}
+                onAvatarHover={handleAvatarHover}
+                onAvatarHoverOut={handleAvatarHoverOut}
               />
             </div>
             
@@ -457,29 +511,45 @@ export function App() {
       {/* Tooltip / Modal Flotante de Hover sobre Avatar */}
       {hoveredAvatar && hoveredAvatar.clientX > 0 && hoveredAvatar.clientY > 0 && (
         <div
-          className="fixed z-50 pointer-events-none transition-transform duration-75 ease-out select-none"
+          className="fixed z-[200] pointer-events-none select-none will-change-transform"
           style={{
-            left: `${Math.max(160, Math.min(window.innerWidth - 160, hoveredAvatar.clientX))}px`,
+            left: `${Math.max(170, Math.min(window.innerWidth - 170, hoveredAvatar.clientX))}px`,
             top: `${Math.max(90, hoveredAvatar.clientY - 12)}px`,
             transform: 'translate(-50%, -100%)',
           }}
         >
-          <div className="relative bg-slate-900/95 backdrop-blur-md border border-slate-700/80 shadow-2xl rounded-xl p-3 w-72 text-xs text-slate-200 animate-in fade-in zoom-in-95 duration-150">
-            {/* Header con nombre y badge de rol */}
+          <div className="relative bg-slate-900 border border-slate-700/80 shadow-2xl rounded-xl p-3 w-80 text-xs text-slate-200 animate-in fade-in zoom-in-95 duration-150">
+            {/* Header con solo el título con colores a la derecha y estado a la izquierda */}
             <div className="flex items-center justify-between gap-2 mb-2 pb-1.5 border-b border-slate-800">
-              <div className="flex items-center gap-2 truncate">
+              <div className="flex items-center gap-1.5">
                 <div className="w-2.5 h-2.5 rounded-full bg-sky-400 animate-pulse shrink-0" />
-                <span className="font-bold text-white text-xs truncate">
-                  {hoveredAvatar.agentName || hoveredAvatar.agentId}
+                <span className="text-[10px] font-mono text-slate-400 uppercase font-semibold">
+                  {hoveredAvatar.state || 'ACTIVO'}
                 </span>
               </div>
-              <span className={`text-[10px] px-1.5 py-0.5 rounded border font-mono shrink-0 ${ROLE_BADGES[hoveredAvatar.agentRole]?.color || 'bg-slate-800 text-slate-300 border-slate-700'}`}>
+              <span className={`text-[11px] px-2 py-0.5 rounded border font-mono font-bold shrink-0 ${ROLE_BADGES[hoveredAvatar.agentRole]?.color || 'bg-slate-800 text-slate-300 border-slate-700'}`}>
                 {ROLE_BADGES[hoveredAvatar.agentRole]?.name || hoveredAvatar.agentRole}
               </span>
             </div>
 
+            {/* Métricas: Hora de inicio y Tiempo de trabajo */}
+            <div className="grid grid-cols-2 gap-1.5 mb-2 font-mono text-[11px]">
+              <div className="flex flex-col bg-slate-950/60 px-2.5 py-1.5 rounded border border-slate-800/80">
+                <span className="text-[10px] text-slate-400">Hora de inicio</span>
+                <span className="font-bold text-slate-200">
+                  {formatTime(hoveredStartTime)}
+                </span>
+              </div>
+              <div className="flex flex-col bg-slate-950/60 px-2.5 py-1.5 rounded border border-slate-800/80">
+                <span className="text-[10px] text-slate-400">Tiempo de trabajo</span>
+                <span className="font-bold text-emerald-400">
+                  {formatDuration(hoveredWorkDurationMs)}
+                </span>
+              </div>
+            </div>
+
             {/* Tiempo de espera desde último log */}
-            <div className="flex items-center justify-between bg-slate-950/60 px-2 py-1 rounded border border-slate-800/80 mb-2 font-mono text-[11px]">
+            <div className="flex items-center justify-between bg-slate-950/60 px-2.5 py-1.5 rounded border border-slate-800/80 mb-2 font-mono text-[11px]">
               <div className="flex items-center gap-1.5 text-slate-400">
                 <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                 <span>Tiempo de espera:</span>
@@ -489,14 +559,21 @@ export function App() {
               </span>
             </div>
 
-            {/* Último log (el más reciente) */}
+            {/* Último log (el más reciente) con hora al lado del título */}
             <div className="space-y-1">
-              <div className="flex items-center gap-1 text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                <Terminal className="w-3 h-3 text-sky-400" />
-                <span>Último log:</span>
+              <div className="flex items-center justify-between text-[10px] font-bold tracking-wider">
+                <div className="flex items-center gap-1 uppercase text-slate-400">
+                  <Terminal className="w-3 h-3 text-sky-400" />
+                  <span>Último log:</span>
+                </div>
+                <span className="font-mono text-slate-400 text-[10px] font-normal tracking-normal">
+                  {formatTime(hoveredLastLogTime)}
+                </span>
               </div>
-              <div className="bg-slate-950/80 p-2 rounded-lg border border-slate-800/80 font-mono text-[11px] text-slate-300 leading-tight break-words max-h-20 overflow-hidden line-clamp-3">
-                {hoveredLatestMessage}
+              <div className="bg-slate-950/80 p-2 rounded-lg border border-slate-800/80 font-mono text-[11px] text-slate-300 leading-4 break-words h-[82px] overflow-hidden flex flex-col justify-start">
+                <p className="line-clamp-4">
+                  {hoveredLatestMessage}
+                </p>
               </div>
             </div>
 

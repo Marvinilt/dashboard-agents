@@ -1,0 +1,1237 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mapa Vertical de Arquitectura - DashboardAgents</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    /* Estilos dinámicos para aristas y animaciones */
+    .edge-line {
+      transition: stroke 0.25s ease, stroke-width 0.25s ease, opacity 0.25s ease;
+    }
+    .edge-line.active {
+      stroke: var(--primary, #38bdf8);
+      stroke-width: 2.5px;
+      opacity: 1 !important;
+      stroke-dasharray: 6 3;
+      animation: dash 1s linear infinite;
+    }
+    .edge-line.dimmed {
+      opacity: 0.1 !important;
+    }
+    @keyframes dash {
+      to { stroke-dashoffset: -18; }
+    }
+    .node-group {
+      cursor: grab;
+      transition: transform 0.15s ease-out, filter 0.2s ease;
+    }
+    .node-group:active {
+      cursor: grabbing;
+    }
+    .node-group.dimmed {
+      opacity: 0.2;
+      filter: grayscale(80%);
+    }
+    .node-group.selected circle.outer-ring {
+      stroke: var(--primary, #38bdf8);
+      stroke-width: 3.5px;
+      filter: drop-shadow(0 0 12px rgba(56, 189, 248, 0.7));
+    }
+    /* Scrollbars elegantes */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: var(--border, #334155);
+      border-radius: 9999px;
+    }
+  </style>
+</head>
+<body class="bg-transparent text-[var(--foreground)] antialiased p-1.5 select-none font-sans text-xs">
+
+  <!-- Card Contenedor Principal (Vertical 880px de altura para máxima dimensión y legibilidad) -->
+  <div class="bg-[var(--card)] text-[var(--foreground)] border border-[var(--border)] rounded-2xl shadow-2xl flex flex-col overflow-hidden relative" style="height: 880px;">
+    
+    <!-- Barra Superior de Control y Búsqueda -->
+    <header class="p-3 border-b border-[var(--border)] bg-[var(--card)]/95 backdrop-blur-md flex flex-wrap items-center justify-between gap-2.5 z-20">
+      <div class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-sky-500 via-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold shadow-md shadow-sky-500/20 text-sm">
+          DA
+        </div>
+        <div>
+          <h1 class="text-sm font-bold tracking-tight text-[var(--foreground)] flex items-center gap-1.5">
+            Mapa de Arquitectura (Vertical)
+            <span class="px-1.5 py-0.5 rounded-full text-[12px] bg-sky-500/15 text-sky-400 border border-sky-500/30 font-medium">DashboardAgents</span>
+          </h1>
+          <p class="text-[12px] text-[var(--muted-foreground)]">Flujo descendente: Telemetría ➔ Backend ➔ React UI ➔ Phaser Engine ➔ Assets</p>
+        </div>
+      </div>
+
+      <!-- Buscador y Controles -->
+      <div class="flex items-center flex-wrap gap-2">
+        <!-- Buscador -->
+        <div class="relative">
+          <input 
+            type="text" 
+            id="searchInput" 
+            placeholder="Buscar componente..." 
+            class="bg-[var(--background)] text-[var(--foreground)] placeholder-[var(--muted-foreground)] text-xs rounded-lg pl-8 pr-3 py-1.5 border border-[var(--border)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)] w-36 sm:w-48 transition-all"
+          />
+          <svg class="w-3.5 h-3.5 absolute left-2.5 top-2 text-[var(--muted-foreground)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+          </svg>
+        </div>
+
+        <!-- Modos de Vista -->
+        <div class="flex rounded-lg border border-[var(--border)] bg-[var(--background)] p-0.5 text-xs">
+          <button id="viewLayersBtn" class="px-2.5 py-1 rounded-md font-medium transition-all bg-[var(--card)] shadow-xs text-[var(--foreground)]">
+            Flujo Vertical
+          </button>
+          <button id="viewForceBtn" class="px-2.5 py-1 rounded-md font-medium transition-all text-[var(--muted-foreground)] hover:text-[var(--foreground)]">
+            Física Orgánica
+          </button>
+        </div>
+
+        <!-- Zoom y Auto-Fit -->
+        <div class="flex items-center gap-1 bg-[var(--background)] border border-[var(--border)] rounded-lg p-0.5">
+          <button id="fitViewBtn" class="px-2 h-7 flex items-center justify-center rounded hover:bg-[var(--card)] text-[var(--foreground)] font-medium text-[12px] transition-colors" title="Ajustar todo a la vista">
+            Ajustar
+          </button>
+          <div class="w-px h-3.5 bg-[var(--border)]"></div>
+          <button id="zoomInBtn" class="w-7 h-7 flex items-center justify-center rounded hover:bg-[var(--card)] text-[var(--foreground)] transition-colors" title="Acercar">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+          </button>
+          <button id="zoomOutBtn" class="w-7 h-7 flex items-center justify-center rounded hover:bg-[var(--card)] text-[var(--foreground)] transition-colors" title="Alejar">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"></path></svg>
+          </button>
+          <button id="resetViewBtn" class="w-7 h-7 flex items-center justify-center rounded hover:bg-[var(--card)] text-[var(--foreground)] transition-colors" title="Reiniciar escala">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Sub-Barra de Navegación Rápida por Capas (Vertical Jump Navigator) -->
+    <div class="px-3 py-1.5 border-b border-[var(--border)] bg-[var(--card)]/70 flex items-center justify-between gap-2 overflow-x-auto z-10 text-[12px]">
+      <div class="flex items-center gap-1.5 flex-nowrap">
+        <span class="font-semibold text-[var(--muted-foreground)] whitespace-nowrap">Saltar a Capa:</span>
+        <button onclick="jumpToLayer(1)" class="px-2 py-0.5 rounded-md hover:bg-[var(--background)] text-amber-400 font-medium border border-amber-500/20 whitespace-nowrap transition-colors">
+          1. Telemetría
+        </button>
+        <button onclick="jumpToLayer(2)" class="px-2 py-0.5 rounded-md hover:bg-[var(--background)] text-blue-400 font-medium border border-blue-500/20 whitespace-nowrap transition-colors">
+          2. Backend
+        </button>
+        <button onclick="jumpToLayer(3)" class="px-2 py-0.5 rounded-md hover:bg-[var(--background)] text-cyan-400 font-medium border border-cyan-500/20 whitespace-nowrap transition-colors">
+          3. Frontend
+        </button>
+        <button onclick="jumpToLayer(4)" class="px-2 py-0.5 rounded-md hover:bg-[var(--background)] text-emerald-400 font-medium border border-emerald-500/20 whitespace-nowrap transition-colors">
+          4. Phaser
+        </button>
+        <button onclick="jumpToLayer(5)" class="px-2 py-0.5 rounded-md hover:bg-[var(--background)] text-purple-400 font-medium border border-purple-500/20 whitespace-nowrap transition-colors">
+          5. Pipeline
+        </button>
+      </div>
+
+      <div class="flex items-center gap-1 ml-auto">
+        <button data-category="all" class="cat-filter-btn px-2.5 py-0.5 rounded-full font-medium border border-transparent bg-[var(--primary)] text-[var(--primary-foreground)] shadow-xs transition-colors whitespace-nowrap">
+          Todos (18)
+        </button>
+      </div>
+    </div>
+
+    <!-- Área de Visualización: SVG Canvas Vertical + Inspector -->
+    <div class="relative flex-1 min-h-0 overflow-hidden bg-[var(--background)]">
+      
+      <!-- Canvas SVG interactivo -->
+      <svg id="graphSvg" class="w-full h-full cursor-grab">
+        <defs>
+          <!-- Flecha de enlace descendente -->
+          <marker id="arrow" viewBox="0 0 10 10" refX="24" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="var(--muted-foreground)" opacity="0.6"/>
+          </marker>
+          <marker id="arrow-active" viewBox="0 0 10 10" refX="24" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="var(--primary, #38bdf8)"/>
+          </marker>
+          <!-- Patrón sutil de fondo -->
+          <pattern id="gridPattern" width="28" height="28" patternUnits="userSpaceOnUse">
+            <circle cx="2" cy="2" r="0.75" fill="var(--border)" opacity="0.5" />
+          </pattern>
+        </defs>
+
+        <rect width="100%" height="100%" fill="url(#gridPattern)" />
+
+        <g id="viewportGroup">
+          <!-- Capa de Carriles de Fondo (Swimlanes arquitectónicos verticales) -->
+          <g id="swimlanesLayer"></g>
+          <!-- Capa de Enlaces / Aristas -->
+          <g id="linksLayer"></g>
+          <!-- Capa de Nodos -->
+          <g id="nodesLayer"></g>
+        </g>
+      </svg>
+
+      <!-- Panel Inspector Lateral / Inferior Desplegable -->
+      <div id="inspectorPanel" class="absolute top-2 right-2 bottom-2 w-80 max-w-[92%] bg-[var(--card)]/95 backdrop-blur-md border border-[var(--border)] rounded-xl shadow-2xl p-4 flex flex-col z-30 transition-transform duration-300 translate-x-full overflow-hidden">
+        
+        <!-- Header Inspector -->
+        <div class="flex items-start justify-between gap-2 border-b border-[var(--border)] pb-3">
+          <div class="flex items-center gap-2.5">
+            <div id="inspIcon" class="w-9 h-9 rounded-xl flex items-center justify-center text-lg bg-[var(--background)] border border-[var(--border)] shadow-xs">
+              📄
+            </div>
+            <div>
+              <span id="inspBadge" class="px-1.5 py-0.5 rounded text-[12px] font-semibold uppercase tracking-wider bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                Backend
+              </span>
+              <h2 id="inspTitle" class="text-sm font-bold text-[var(--foreground)] mt-0.5 leading-tight">
+                Título del Componente
+              </h2>
+            </div>
+          </div>
+          <button id="closeInspectorBtn" class="text-[var(--muted-foreground)] hover:text-[var(--foreground)] p-1 rounded-md hover:bg-[var(--background)] transition-colors">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+          </button>
+        </div>
+
+        <!-- Contenido Desplazable del Inspector -->
+        <div class="flex-1 overflow-y-auto pt-3 space-y-3 pr-1">
+          <!-- Ruta de archivo -->
+          <div>
+            <label class="text-[12px] font-semibold text-[var(--muted-foreground)] uppercase tracking-wider block mb-1">
+              Archivo / Módulo
+            </label>
+            <div class="bg-[var(--background)] border border-[var(--border)] rounded-lg p-2 font-mono text-[12px] text-[var(--foreground)] break-all select-all flex items-center justify-between">
+              <span id="inspFilePath">backend/src/server.js</span>
+              <button id="copyPathBtn" title="Copiar ruta" class="ml-1 text-[var(--muted-foreground)] hover:text-[var(--foreground)]">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Responsabilidad Principal -->
+          <div>
+            <label class="text-[12px] font-semibold text-[var(--muted-foreground)] uppercase tracking-wider block mb-1">
+              Función Arquitectónica
+            </label>
+            <p id="inspDescription" class="text-xs text-[var(--foreground)] leading-relaxed bg-[var(--background)]/60 p-2.5 rounded-lg border border-[var(--border)]">
+              Descripción detallada de la función del elemento en la arquitectura.
+            </p>
+          </div>
+
+          <!-- Funciones y APIs Clave -->
+          <div>
+            <label class="text-[12px] font-semibold text-[var(--muted-foreground)] uppercase tracking-wider block mb-1">
+              Claves y Métodos Principales
+            </label>
+            <div id="inspFeatures" class="flex flex-wrap gap-1.5"></div>
+          </div>
+
+          <!-- Conexiones: De dónde recibe datos -->
+          <div>
+            <label class="text-[12px] font-semibold text-emerald-400 uppercase tracking-wider block mb-1 flex items-center gap-1">
+              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16l-4-4m0 0l4-4m-4 4h18"></path></svg>
+              Recibe Datos De (Entradas)
+            </label>
+            <div id="inspInbound" class="space-y-1"></div>
+          </div>
+
+          <!-- Conexiones: A dónde envía datos -->
+          <div>
+            <label class="text-[12px] font-semibold text-sky-400 uppercase tracking-wider block mb-1 flex items-center gap-1">
+              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"></path></svg>
+              Envía Datos A (Salidas)
+            </label>
+            <div id="inspOutbound" class="space-y-1"></div>
+          </div>
+        </div>
+
+        <!-- Footer del Inspector -->
+        <div class="pt-3 border-t border-[var(--border)] mt-auto flex items-center justify-between">
+          <span class="text-[12px] text-[var(--muted-foreground)]">Clic en enlaces para navegar</span>
+          <button id="focusNodeBtn" class="px-2.5 py-1 bg-[var(--primary)] text-[var(--primary-foreground)] rounded-lg text-xs font-semibold hover:opacity-90 transition-opacity">
+            Centrar Nodo
+          </button>
+        </div>
+      </div>
+
+      <!-- Guía de Navegación Inferior -->
+      <div class="absolute bottom-2 left-2 pointer-events-none z-10 flex items-center gap-2 bg-[var(--card)]/90 backdrop-blur-md border border-[var(--border)] rounded-lg px-2.5 py-1.5 text-[12px] text-[var(--muted-foreground)] shadow-sm">
+        <span>🖱️ <b>Arrastra</b> el fondo o nodos</span>
+        <span class="opacity-40">|</span>
+        <span><b>Rueda</b> para zoom</span>
+        <span class="opacity-40">|</span>
+        <span><b>Clic</b> para detalles</span>
+      </div>
+
+    </div>
+
+  </div>
+
+  <script>
+    // ==========================================
+    // 1. DATASET DE NODOS Y ARQUITECTURA VERTICAL
+    // ==========================================
+    const GRAPH_DATA = {
+      nodes: [
+        // CAPA 1: TELEMETRÍA Y ENTRADAS (Y: ~75)
+        {
+          id: 'transcripts',
+          name: 'Antigravity Brain Logs',
+          layer: 1,
+          category: 'data',
+          icon: '📄',
+          file: '.gemini/antigravity/brain/*/transcript.jsonl',
+          badge: 'JSONL Stream',
+          summary: 'Archivos de telemetría emitidos por el orquestador multi-agente de Antigravity. Contiene pasos de pensamiento, llamadas a herramientas del sistema y mensajes de coordinación.',
+          features: ['JSON Lines', 'Auto-tailing', 'created_at', 'step_index', 'Subagents'],
+          x: 220, y: 75
+        },
+        {
+          id: 'mock_sessions',
+          name: 'Sesiones Mock / Ejemplo',
+          layer: 1,
+          category: 'data',
+          icon: '📦',
+          file: 'Conversaciones ejemplo/ & mock_data/',
+          badge: 'Dataset Offline',
+          summary: 'Sesiones grabadas completas y datos sintéticos utilizados para validar el motor de simulación, la animación de avatares y la visualización sin necesidad de agentes en vivo.',
+          features: ['Multi-agente 29081f31', 'Sesiones Históricas', 'Tiempos relativos'],
+          x: 420, y: 75
+        },
+
+        // CAPA 2: BACKEND NODE.JS (Y: ~190 - 320)
+        {
+          id: 'watcher_js',
+          name: 'Live Watcher',
+          layer: 2,
+          category: 'backend',
+          icon: '👁️',
+          file: 'backend/src/watcher.js',
+          badge: 'Chokidar Engine',
+          summary: 'Monitorea activamente en tiempo real los archivos transcript.jsonl. Al detectar la invocación de subagentes, adjunta watchers recursivos dinámicamente.',
+          features: ['Chokidar Watcher', 'startWatchingSession', 'Lectura incremental', 'Subagent Hook'],
+          x: 180, y: 195
+        },
+        {
+          id: 'simulator_js',
+          name: 'Simulation Engine',
+          layer: 2,
+          category: 'backend',
+          icon: '⏱️',
+          file: 'backend/src/simulator.js',
+          badge: 'Timeline Replay',
+          summary: 'Motor de reproducción histórica. Calcula diferencias temporales entre eventos y los reproduce a velocidad acelerada (1x a 10x) con capacidad de pausa y salto en la línea de tiempo.',
+          features: ['Aceleración (1x-10x)', 'Línea de tiempo scrubbable', 'startSimulation', 'pause/resume'],
+          x: 460, y: 195
+        },
+        {
+          id: 'parser_js',
+          name: 'Semantic Parser',
+          layer: 2,
+          category: 'backend',
+          icon: '🧠',
+          file: 'backend/src/parser.js',
+          badge: 'Log Normalizer',
+          summary: 'Traduce eventos de bajo nivel a estados semánticos del avatar: SPAWNING, WORKING, THINKING, WAITING_INPUT, IDLE, DESPAWNING. Asigna roles e identidades.',
+          features: ['parseTranscriptLine', 'mapSubagentRole', 'ROLE_DEFINITIONS', 'State Inference'],
+          x: 320, y: 235
+        },
+        {
+          id: 'server_js',
+          name: 'Express + Socket.IO Server',
+          layer: 2,
+          category: 'backend',
+          icon: '⚡',
+          file: 'backend/src/server.js',
+          badge: 'Node Service (Port 3001)',
+          summary: 'Servidor central que conecta backend y frontend. Expone REST API (/api/sessions), escanea las carpetas locales del disco y mantiene el canal WebSocket de telemetría.',
+          features: ['Express REST API', 'Socket.IO Server', 'scanDirectoryForSessions', 'Live/Sim Switcher'],
+          x: 320, y: 325
+        },
+
+        // CAPA 3: FRONTEND REACT 19 (Y: ~430 - 530)
+        {
+          id: 'app_jsx',
+          name: 'App (React Root)',
+          layer: 3,
+          category: 'frontend',
+          icon: '⚛️',
+          file: 'frontend/src/App.jsx',
+          badge: 'React 19 Container',
+          summary: 'Controlador principal de la UI. Gestiona la conexión WebSocket, el búfer de logs en vivo (últimos 500 eventos), métricas globales de agentes y el modo de pantalla completa.',
+          features: ['Socket.IO Client', 'telemetryLogs State', 'Agent HUD Selector', 'Maximized View Mode'],
+          x: 320, y: 435
+        },
+        {
+          id: 'session_selector',
+          name: 'Session Selector & HUD',
+          layer: 3,
+          category: 'frontend',
+          icon: '🎛️',
+          file: 'frontend/src/components/SessionSelector.jsx',
+          badge: 'UI Toolbar',
+          summary: 'Barra de selección de sesión, selector de velocidad (1x a 10x), interruptor de modo en vivo/simulación y explorador de rutas de disco personalizadas.',
+          features: ['Selector de Sesión', 'Velocidad 1x-10x', 'Live / Sim toggle', 'Custom Path Picker'],
+          x: 160, y: 445
+        },
+        {
+          id: 'agent_sidebar',
+          name: 'Agent Sidebar (HUD)',
+          layer: 3,
+          category: 'frontend',
+          icon: '📋',
+          file: 'frontend/src/components/AgentSidebar.jsx',
+          badge: 'Slide-over Panel',
+          summary: 'Panel deslizable de telemetría de cada agente. Incluye terminal interactiva de logs, razonamiento (thought process), argumentos de herramientas y respuesta a prompts humanos.',
+          features: ['Terminal en Vivo', 'Visualizador de Pensamientos', 'Tool Arguments', 'Formulario de Entrada'],
+          x: 480, y: 445
+        },
+        {
+          id: 'editor_ui',
+          name: 'Office Editor UI',
+          layer: 3,
+          category: 'frontend',
+          icon: '🛠️',
+          file: 'frontend/src/components/EditorUI.jsx',
+          badge: 'Layout Editor',
+          summary: 'Herramientas de edición visual en vivo de la oficina: colocación de escritorios, muebles de descanso, pintura celda por celda (32x32) con atajo R de rotación.',
+          features: ['Pintura Drag-to-Paint', 'Atajo R de Rotación', 'Catálogo Muebles', 'Exportación JSON'],
+          x: 160, y: 535
+        },
+        {
+          id: 'phaser_game_jsx',
+          name: 'PhaserGame Bridge',
+          layer: 3,
+          category: 'frontend',
+          icon: '🎮',
+          file: 'frontend/src/components/PhaserGame.jsx',
+          badge: 'Canvas Wrapper',
+          summary: 'Componente puente entre React y el motor Phaser 3. Inicializa el canvas WebGL, gestiona el ciclo de vida del juego y expone la instancia de la escena.',
+          features: ['Phaser.Game Mounting', 'Unmount Lifecycle', 'Scene Ref Bridge'],
+          x: 320, y: 535
+        },
+
+        // CAPA 4: MOTOR PHASER 3 (Y: ~640 - 740)
+        {
+          id: 'event_bus',
+          name: 'EventBus (Decoupled)',
+          layer: 4,
+          category: 'game',
+          icon: '🔄',
+          file: 'frontend/src/game/eventBus.js',
+          badge: 'Pub/Sub Bridge',
+          summary: 'Bus de eventos desacoplado entre React y Phaser. Evita degradaciones de rendimiento y fugas de memoria al separar los re-renders de React del loop de Phaser a 60 FPS.',
+          features: ['Patrón Decoupled', 'Eventos SPAWN/DESPAWN', 'Zero React Coupling'],
+          x: 180, y: 640
+        },
+        {
+          id: 'office_scene',
+          name: 'OfficeScene (Map & Path)',
+          layer: 4,
+          category: 'game',
+          icon: '🏢',
+          file: 'frontend/src/game/OfficeScene.js',
+          badge: 'Phaser 3 Scene',
+          summary: 'Escena ortogonal de la oficina (27x16 casillas, 32px). Controla el pathfinding con EasyStar.js, el ciclo día/noche, la cuadrícula de colisiones y los tooltips flotantes al pasar el cursor.',
+          features: ['Grid 27x16 (32px)', 'EasyStar.js Pathfinding', 'Hover HUD', 'Día / Noche', 'Matriz Colisiones'],
+          x: 320, y: 640
+        },
+        {
+          id: 'default_layout',
+          name: 'Default Layout (Grid JSON)',
+          layer: 4,
+          category: 'game',
+          icon: '🗺️',
+          file: 'frontend/src/game/defaultLayout.json',
+          badge: 'Level Matrix',
+          summary: 'Definición en formato JSON de la estructura de la oficina: posiciones exactas de escritorios de trabajo, áreas lounge de descanso, paredes y celdas transitables.',
+          features: ['Coordenadas de Desks', 'Lounge Spots', 'Matriz de Colisión'],
+          x: 460, y: 640
+        },
+        {
+          id: 'avatar_fsm',
+          name: 'Avatar FSM & Animation',
+          layer: 4,
+          category: 'game',
+          icon: '🤖',
+          file: 'frontend/src/game/Avatar.js',
+          badge: 'Agent Entity',
+          summary: 'Entidad de agente con máquina de estados finita: caminar direccional 4 vías, squash & stretch procedural, tecleo en escritorio y globos de espera de input humano (⚠️).',
+          features: ['FSM 5 Estados', 'Squash & Stretch', 'Globos de Diálogo', 'Partículas de Pisadas'],
+          x: 240, y: 740
+        },
+        {
+          id: 'agent_mapper',
+          name: 'Agent Mapper & Roles',
+          layer: 4,
+          category: 'game',
+          icon: '🎭',
+          file: 'frontend/src/game/agentMapper.js',
+          badge: 'Role Catalog',
+          summary: 'Resuelve la asignación visual para cada rol: Tech Lead, Developer, QA, Designer, DBA, Security y Documenter con sus respectivos escritorios fijos.',
+          features: ['7 Roles Especializados', 'Mapeo a Spritesheets', 'Asignación de Estaciones'],
+          x: 400, y: 740
+        },
+
+        // CAPA 5: PIPELINE ASSETS PYTHON (Y: ~840)
+        {
+          id: 'process_avatar',
+          name: 'Sprite Generator',
+          layer: 5,
+          category: 'pipeline',
+          icon: '🎨',
+          file: 'scripts/process_avatar.py',
+          badge: 'Python Imaging',
+          summary: 'Script para procesar, segmentar y transparentar las hojas de sprites de avatares creadas mediante generación con IA para su uso en la cuadrícula de juego.',
+          features: ['PIL / OpenCV', 'Remoción Alpha', 'Corte de Spritesheets'],
+          x: 240, y: 840
+        },
+        {
+          id: 'align_avatars',
+          name: 'Working Pose Alignment',
+          layer: 5,
+          category: 'pipeline',
+          icon: '📐',
+          file: 'scripts/align_working_avatars.py',
+          badge: 'Calibration Script',
+          summary: 'Calibra y normaliza los fotogramas de avatares trabajando en escritorio para sincronizar de manera exacta la perspectiva con los muebles de la oficina.',
+          features: ['Bounding Box Calibration', 'Alineación de Torso', 'Normalización 688x768'],
+          x: 400, y: 840
+        }
+      ],
+
+      links: [
+        { source: 'transcripts', target: 'watcher_js', label: 'Tailing en vivo', type: 'data-flow' },
+        { source: 'transcripts', target: 'simulator_js', label: 'Lectura histórica', type: 'data-flow' },
+        { source: 'mock_sessions', target: 'simulator_js', label: 'Archivos mock', type: 'data-flow' },
+        { source: 'watcher_js', target: 'parser_js', label: 'Líneas JSONL', type: 'data-flow' },
+        { source: 'simulator_js', target: 'parser_js', label: 'Eventos temporizados', type: 'data-flow' },
+        { source: 'parser_js', target: 'server_js', label: 'Eventos normalizados', type: 'event' },
+        { source: 'server_js', target: 'app_jsx', label: 'Socket.IO (AGENT_EVENT)', type: 'network' },
+        { source: 'app_jsx', target: 'server_js', label: 'REST (/api/sessions)', type: 'network' },
+        { source: 'app_jsx', target: 'session_selector', label: 'Props & Estado', type: 'ui' },
+        { source: 'app_jsx', target: 'agent_sidebar', label: 'Agente seleccionado', type: 'ui' },
+        { source: 'app_jsx', target: 'editor_ui', label: 'Modo edición', type: 'ui' },
+        { source: 'app_jsx', target: 'phaser_game_jsx', label: 'Monta canvas', type: 'ui' },
+        { source: 'app_jsx', target: 'event_bus', label: 'Emite telemetría', type: 'event' },
+        { source: 'event_bus', target: 'office_scene', label: 'Despacha acciones', type: 'event' },
+        { source: 'phaser_game_jsx', target: 'office_scene', label: 'Instancia escena', type: 'game-call' },
+        { source: 'office_scene', target: 'default_layout', label: 'Carga tiles y desks', type: 'data-flow' },
+        { source: 'office_scene', target: 'avatar_fsm', label: 'Instancia y mueve', type: 'game-call' },
+        { source: 'avatar_fsm', target: 'agent_mapper', label: 'Consulta rol & sprite', type: 'game-call' },
+        { source: 'process_avatar', target: 'avatar_fsm', label: 'Genera assets', type: 'asset' },
+        { source: 'align_avatars', target: 'avatar_fsm', label: 'Calibra postura', type: 'asset' },
+        { source: 'agent_sidebar', target: 'app_jsx', label: 'Respuesta humana', type: 'ui' }
+      ]
+    };
+
+    // Configuración estética de carriles verticales (Swimlanes)
+    const SWIMLANES = [
+      { id: 1, title: 'CAPA 1: FUENTE DE DATOS Y TELEMETRÍA (JSONL LOGS)', y: 15, h: 115, border: '#f59e0b', bg: 'rgba(245, 158, 11, 0.04)' },
+      { id: 2, title: 'CAPA 2: BACKEND NODE.JS (PARSER & SOCKET.IO SERVER)', y: 145, h: 220, border: '#3b82f6', bg: 'rgba(59, 130, 246, 0.04)' },
+      { id: 3, title: 'CAPA 3: FRONTEND REACT 19 (HUD, CONTROLES & PUENTE)', y: 380, h: 200, border: '#06b6d4', bg: 'rgba(6, 182, 212, 0.04)' },
+      { id: 4, title: 'CAPA 4: MOTOR PHASER 3 (MAPA ISOMÉTRICO & AVATARES FSM)', y: 595, h: 185, border: '#10b981', bg: 'rgba(16, 185, 129, 0.04)' },
+      { id: 5, title: 'CAPA 5: PIPELINE ASSETS PYTHON (GENERACIÓN Y CALIBRACIÓN)', y: 795, h: 90, border: '#c084fc', bg: 'rgba(192, 132, 252, 0.04)' }
+    ];
+
+    // Colores y badges por categoría
+    const CATEGORY_CONFIG = {
+      data: {
+        name: 'Telemetría',
+        border: '#f59e0b',
+        text: '#f59e0b',
+        badgeClass: 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+      },
+      backend: {
+        name: 'Backend Node',
+        border: '#3b82f6',
+        text: '#60a5fa',
+        badgeClass: 'bg-blue-500/20 text-blue-300 border-blue-500/40'
+      },
+      frontend: {
+        name: 'Frontend React',
+        border: '#06b6d4',
+        text: '#22d3ee',
+        badgeClass: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
+      },
+      game: {
+        name: 'Phaser Engine',
+        border: '#10b981',
+        text: '#34d399',
+        badgeClass: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+      },
+      pipeline: {
+        name: 'Pipeline Python',
+        border: '#c084fc',
+        text: '#d8b4fe',
+        badgeClass: 'bg-purple-500/20 text-purple-300 border-purple-500/40'
+      }
+    };
+
+    // Coordenadas fijas por defecto (Vertical Hierarchy)
+    const VERTICAL_COORDS = {};
+    GRAPH_DATA.nodes.forEach(n => {
+      VERTICAL_COORDS[n.id] = { x: n.x, y: n.y };
+    });
+
+    // ==========================================
+    // 2. ESTADO DE LA APLICACIÓN
+    // ==========================================
+    let currentViewMode = 'layers'; // 'layers' (Vertical) por defecto!
+    let selectedNodeId = null;
+    let activeCategory = 'all';
+    let searchQuery = '';
+
+    // Transformaciones
+    let scale = 0.9;
+    let panX = 40;
+    let panY = 20;
+    let isPanning = false;
+    let startPanX = 0;
+    let startPanY = 0;
+
+    // Arrastre de nodo
+    let draggedNode = null;
+    let dragStartX = 0;
+    let dragStartY = 0;
+
+    // Físicas
+    let velocity = {};
+    GRAPH_DATA.nodes.forEach(n => {
+      velocity[n.id] = { vx: 0, vy: 0 };
+    });
+
+    // Elementos DOM
+    const svg = document.getElementById('graphSvg');
+    const viewportGroup = document.getElementById('viewportGroup');
+    const swimlanesLayer = document.getElementById('swimlanesLayer');
+    const linksLayer = document.getElementById('linksLayer');
+    const nodesLayer = document.getElementById('nodesLayer');
+    const inspectorPanel = document.getElementById('inspectorPanel');
+    const searchInput = document.getElementById('searchInput');
+
+    // ==========================================
+    // 3. RENDERIZADO DEL GRAFO
+    // ==========================================
+    function initGraph() {
+      renderSwimlanes();
+      renderLinks();
+      renderNodes();
+      updateTransform();
+      startPhysicsLoop();
+      setupEvents();
+
+      // Centrar automáticamente en la vista
+      fitToView();
+
+      // Seleccionar el componente principal por defecto
+      selectNode('app_jsx');
+    }
+
+    function renderSwimlanes() {
+      swimlanesLayer.innerHTML = '';
+      SWIMLANES.forEach(lane => {
+        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        g.setAttribute('class', 'swimlane-group');
+
+        // Rectángulo contenedor de carril
+        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        rect.setAttribute('x', '40');
+        rect.setAttribute('y', lane.y);
+        rect.setAttribute('width', '560');
+        rect.setAttribute('height', lane.h);
+        rect.setAttribute('rx', '14');
+        rect.setAttribute('fill', lane.bg);
+        rect.setAttribute('stroke', lane.border);
+        rect.setAttribute('stroke-width', '1.5');
+        rect.setAttribute('stroke-dasharray', '5 4');
+        rect.setAttribute('opacity', '0.7');
+        g.appendChild(rect);
+
+        // Encabezado de la capa
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('x', '55');
+        text.setAttribute('y', lane.y + 18);
+        text.setAttribute('fill', lane.border);
+        text.setAttribute('font-size', '12');
+        text.setAttribute('font-weight', '700');
+        text.setAttribute('letter-spacing', '0.04em');
+        text.textContent = lane.title;
+        g.appendChild(text);
+
+        swimlanesLayer.appendChild(g);
+      });
+    }
+
+    function renderLinks() {
+      linksLayer.innerHTML = '';
+      GRAPH_DATA.links.forEach((link, idx) => {
+        const sourceNode = GRAPH_DATA.nodes.find(n => n.id === link.source);
+        const targetNode = GRAPH_DATA.nodes.find(n => n.id === link.target);
+        if (!sourceNode || !targetNode) return;
+
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('id', `link-${idx}`);
+        path.setAttribute('class', 'edge-line');
+        path.setAttribute('data-source', link.source);
+        path.setAttribute('data-target', link.target);
+        path.setAttribute('stroke', 'var(--border, #334155)');
+        path.setAttribute('stroke-width', '1.5');
+        path.setAttribute('fill', 'none');
+        path.setAttribute('opacity', '0.5');
+        path.setAttribute('marker-end', 'url(#arrow)');
+
+        linksLayer.appendChild(path);
+      });
+      updateLinkPositions();
+    }
+
+    function renderNodes() {
+      nodesLayer.innerHTML = '';
+      GRAPH_DATA.nodes.forEach(node => {
+        const config = CATEGORY_CONFIG[node.category] || CATEGORY_CONFIG.backend;
+
+        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        g.setAttribute('id', `node-${node.id}`);
+        g.setAttribute('class', 'node-group');
+        g.setAttribute('data-id', node.id);
+        g.setAttribute('data-category', node.category);
+
+        // Anillo exterior de selección
+        const ring = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        ring.setAttribute('class', 'outer-ring');
+        ring.setAttribute('r', '27');
+        ring.setAttribute('fill', 'none');
+        ring.setAttribute('stroke', 'transparent');
+        ring.setAttribute('stroke-width', '2');
+        g.appendChild(ring);
+
+        // Cuerpo del nodo
+        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        circle.setAttribute('class', 'node-body');
+        circle.setAttribute('r', '22');
+        circle.setAttribute('fill', 'var(--card, #1e293b)');
+        circle.setAttribute('stroke', config.border);
+        circle.setAttribute('stroke-width', '2.5');
+        circle.setAttribute('filter', 'drop-shadow(0 2px 6px rgba(0,0,0,0.35))');
+        g.appendChild(circle);
+
+        // Icono Emoji
+        const textIcon = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        textIcon.setAttribute('text-anchor', 'middle');
+        textIcon.setAttribute('dominant-baseline', 'central');
+        textIcon.setAttribute('font-size', '16');
+        textIcon.setAttribute('y', '-1');
+        textIcon.textContent = node.icon;
+        g.appendChild(textIcon);
+
+        // Etiqueta del Nodo (debajo)
+        const textLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        textLabel.setAttribute('class', 'node-label font-bold');
+        textLabel.setAttribute('text-anchor', 'middle');
+        textLabel.setAttribute('dominant-baseline', 'hanging');
+        textLabel.setAttribute('y', '27');
+        textLabel.setAttribute('fill', 'var(--foreground, #f8fafc)');
+        textLabel.setAttribute('font-size', '12');
+        textLabel.textContent = node.name;
+        g.appendChild(textLabel);
+
+        // Subtítulo del Nodo
+        const textSub = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        textSub.setAttribute('text-anchor', 'middle');
+        textSub.setAttribute('dominant-baseline', 'hanging');
+        textSub.setAttribute('y', '42');
+        textSub.setAttribute('fill', config.text);
+        textSub.setAttribute('font-size', '12');
+        textSub.setAttribute('opacity', '0.85');
+        textSub.textContent = node.badge;
+        g.appendChild(textSub);
+
+        nodesLayer.appendChild(g);
+      });
+      updateNodePositions();
+    }
+
+    function updateNodePositions() {
+      GRAPH_DATA.nodes.forEach(node => {
+        const el = document.getElementById(`node-${node.id}`);
+        if (el) {
+          el.setAttribute('transform', `translate(${node.x}, ${node.y})`);
+        }
+      });
+    }
+
+    function updateLinkPositions() {
+      GRAPH_DATA.links.forEach((link, idx) => {
+        const path = document.getElementById(`link-${idx}`);
+        const source = GRAPH_DATA.nodes.find(n => n.id === link.source);
+        const target = GRAPH_DATA.nodes.find(n => n.id === link.target);
+        if (!path || !source || !target) return;
+
+        // Curvatura bezier adaptada al flujo vertical
+        const dx = target.x - source.x;
+        const dy = target.y - source.y;
+        
+        let cx1 = source.x;
+        let cy1 = source.y + dy * 0.45;
+        let cx2 = target.x;
+        let cy2 = target.y - dy * 0.45;
+
+        // Si el enlace fluye hacia arriba (ej: respuesta humana o ciclo)
+        if (dy < 0) {
+          cx1 = source.x + 70;
+          cy1 = source.y;
+          cx2 = target.x + 70;
+          cy2 = target.y;
+        }
+
+        path.setAttribute('d', `M ${source.x} ${source.y} C ${cx1} ${cy1}, ${cx2} ${cy2}, ${target.x} ${target.y}`);
+      });
+    }
+
+    function updateTransform() {
+      viewportGroup.setAttribute('transform', `translate(${panX}, ${panY}) scale(${scale})`);
+    }
+
+    // ==========================================
+    // 4. MOTOR FÍSICO Y NAVEGACIÓN VERTICAL
+    // ==========================================
+    function startPhysicsLoop() {
+      function step() {
+        if (currentViewMode === 'force') {
+          const nodes = GRAPH_DATA.nodes;
+          const links = GRAPH_DATA.links;
+
+          // 1. Repulsión entre nodos
+          for (let i = 0; i < nodes.length; i++) {
+            for (let j = i + 1; j < nodes.length; j++) {
+              const n1 = nodes[i];
+              const n2 = nodes[j];
+              const dx = n2.x - n1.x;
+              const dy = n2.y - n1.y;
+              const distSq = dx * dx + dy * dy || 1;
+              const dist = Math.sqrt(distSq);
+
+              if (dist < 220) {
+                const force = 3000 / distSq;
+                const fx = (dx / dist) * force;
+                const fy = (dy / dist) * force;
+
+                velocity[n1.id].vx -= fx;
+                velocity[n1.id].vy -= fy;
+                velocity[n2.id].vx += fx;
+                velocity[n2.id].vy += fy;
+              }
+            }
+          }
+
+          // 2. Atracción elástica vertical
+          links.forEach(l => {
+            const s = nodes.find(n => n.id === l.source);
+            const t = nodes.find(n => n.id === l.target);
+            if (!s || !t) return;
+
+            const dx = t.x - s.x;
+            const dy = t.y - s.y;
+            const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+            const targetDist = 120;
+            const force = (dist - targetDist) * 0.03;
+
+            const fx = (dx / dist) * force;
+            const fy = (dy / dist) * force;
+
+            velocity[s.id].vx += fx;
+            velocity[s.id].vy += fy;
+            velocity[t.id].vx -= fx;
+            velocity[t.id].vy -= fy;
+          });
+
+          // 3. Alineación vertical por capa (sesgo Y)
+          nodes.forEach(n => {
+            const target = VERTICAL_COORDS[n.id] || { x: 320, y: 450 };
+            velocity[n.id].vy += (target.y - n.y) * 0.04;
+            velocity[n.id].vx += (target.x - n.x) * 0.02;
+          });
+
+          // 4. Amortiguación
+          nodes.forEach(n => {
+            if (draggedNode && draggedNode.id === n.id) {
+              velocity[n.id].vx = 0;
+              velocity[n.id].vy = 0;
+              return;
+            }
+
+            velocity[n.id].vx *= 0.8;
+            velocity[n.id].vy *= 0.8;
+
+            n.x += velocity[n.id].vx;
+            n.y += velocity[n.id].vy;
+          });
+
+          updateNodePositions();
+          updateLinkPositions();
+        } else if (currentViewMode === 'layers') {
+          // Transición suave hacia las coordenadas verticales fijas
+          let moved = false;
+          GRAPH_DATA.nodes.forEach(n => {
+            const target = VERTICAL_COORDS[n.id];
+            if (!target) return;
+            const dx = target.x - n.x;
+            const dy = target.y - n.y;
+            if (Math.abs(dx) > 0.4 || Math.abs(dy) > 0.4) {
+              n.x += dx * 0.18;
+              n.y += dy * 0.18;
+              moved = true;
+            }
+          });
+          if (moved) {
+            updateNodePositions();
+            updateLinkPositions();
+          }
+        }
+
+        requestAnimationFrame(step);
+      }
+
+      requestAnimationFrame(step);
+    }
+
+    // Saltar suavemente a una capa vertical
+    window.jumpToLayer = function(layerNumber) {
+      const lane = SWIMLANES.find(l => l.id === layerNumber);
+      if (!lane) return;
+
+      const svgRect = svg.getBoundingClientRect();
+      const targetPanY = (svgRect.height * 0.25) - (lane.y * scale);
+      const targetPanX = (svgRect.width / 2) - (320 * scale) - (inspectorPanel.classList.contains('translate-x-full') ? 0 : 100);
+
+      panX = targetPanX;
+      panY = targetPanY;
+      updateTransform();
+    };
+
+    function fitToView() {
+      const svgRect = svg.getBoundingClientRect();
+      const contentWidth = 560;
+      const contentHeight = 920;
+
+      // Calcular escala para encajar la dimensión vertical completa
+      const scaleX = (svgRect.width - (inspectorPanel.classList.contains('translate-x-full') ? 40 : 280)) / contentWidth;
+      const scaleY = (svgRect.height - 40) / contentHeight;
+      scale = Math.min(Math.max(Math.min(scaleX, scaleY), 0.55), 1.05);
+
+      panX = (svgRect.width / 2) - (320 * scale) - (inspectorPanel.classList.contains('translate-x-full') ? 0 : 120);
+      panY = 25;
+      updateTransform();
+    }
+
+    // ==========================================
+    // 5. INSPECTOR LATERAL INTERACTIVO
+    // ==========================================
+    function selectNode(nodeId) {
+      selectedNodeId = nodeId;
+      const node = GRAPH_DATA.nodes.find(n => n.id === nodeId);
+      if (!node) {
+        inspectorPanel.classList.add('translate-x-full');
+        clearHighlights();
+        return;
+      }
+
+      const config = CATEGORY_CONFIG[node.category] || CATEGORY_CONFIG.backend;
+      document.getElementById('inspIcon').textContent = node.icon;
+      
+      const badge = document.getElementById('inspBadge');
+      badge.textContent = `Capa ${node.layer} • ${config.name}`;
+      badge.className = `px-1.5 py-0.5 rounded text-[12px] font-semibold uppercase tracking-wider ${config.badgeClass}`;
+
+      document.getElementById('inspTitle').textContent = node.name;
+      document.getElementById('inspFilePath').textContent = node.file;
+      document.getElementById('inspDescription').textContent = node.summary;
+
+      // Badges
+      const featContainer = document.getElementById('inspFeatures');
+      featContainer.innerHTML = '';
+      node.features.forEach(f => {
+        const span = document.createElement('span');
+        span.className = 'px-2 py-0.5 rounded-md text-[12px] bg-[var(--background)] border border-[var(--border)] text-[var(--foreground)] font-mono';
+        span.textContent = f;
+        featContainer.appendChild(span);
+      });
+
+      // Entradas (Inbound)
+      const inContainer = document.getElementById('inspInbound');
+      inContainer.innerHTML = '';
+      const inboundLinks = GRAPH_DATA.links.filter(l => l.target === nodeId);
+      if (inboundLinks.length === 0) {
+        inContainer.innerHTML = '<span class="text-[12px] text-[var(--muted-foreground)] italic">Sin dependencias de entrada directa</span>';
+      } else {
+        inboundLinks.forEach(l => {
+          const src = GRAPH_DATA.nodes.find(n => n.id === l.source);
+          if (!src) return;
+          inContainer.appendChild(createConnectionButton(src, l.label, 'emerald'));
+        });
+      }
+
+      // Salidas (Outbound)
+      const outContainer = document.getElementById('inspOutbound');
+      outContainer.innerHTML = '';
+      const outboundLinks = GRAPH_DATA.links.filter(l => l.source === nodeId);
+      if (outboundLinks.length === 0) {
+        outContainer.innerHTML = '<span class="text-[12px] text-[var(--muted-foreground)] italic">Nodo terminal (hoja)</span>';
+      } else {
+        outboundLinks.forEach(l => {
+          const tgt = GRAPH_DATA.nodes.find(n => n.id === l.target);
+          if (!tgt) return;
+          outContainer.appendChild(createConnectionButton(tgt, l.label, 'sky'));
+        });
+      }
+
+      // Abrir inspector
+      inspectorPanel.classList.remove('translate-x-full');
+
+      // Resaltar en SVG
+      highlightActiveGraph(nodeId);
+    }
+
+    function createConnectionButton(targetNode, relationLabel, color) {
+      const btn = document.createElement('button');
+      btn.className = `w-full text-left p-1.5 rounded-lg bg-[var(--background)] hover:bg-[var(--card)] border border-[var(--border)] hover:border-${color}-500/50 flex items-center justify-between text-xs transition-colors group`;
+      btn.innerHTML = `
+        <div class="flex items-center gap-1.5 truncate">
+          <span class="text-sm">${targetNode.icon}</span>
+          <span class="font-medium text-[var(--foreground)] truncate">${targetNode.name}</span>
+        </div>
+        <span class="text-[12px] text-[var(--muted-foreground)] group-hover:text-${color}-400 font-mono">${relationLabel}</span>
+      `;
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        selectNode(targetNode.id);
+        focusOnNode(targetNode.id);
+      };
+      return btn;
+    }
+
+    function highlightActiveGraph(centerId) {
+      const connectedNodeIds = new Set([centerId]);
+      GRAPH_DATA.links.forEach(l => {
+        if (l.source === centerId) connectedNodeIds.add(l.target);
+        if (l.target === centerId) connectedNodeIds.add(l.source);
+      });
+
+      GRAPH_DATA.nodes.forEach(n => {
+        const el = document.getElementById(`node-${n.id}`);
+        if (!el) return;
+        el.classList.remove('selected', 'dimmed');
+        if (n.id === centerId) {
+          el.classList.add('selected');
+        } else if (!connectedNodeIds.has(n.id)) {
+          el.classList.add('dimmed');
+        }
+      });
+
+      GRAPH_DATA.links.forEach((l, idx) => {
+        const path = document.getElementById(`link-${idx}`);
+        if (!path) return;
+        path.classList.remove('active', 'dimmed');
+        if (l.source === centerId || l.target === centerId) {
+          path.classList.add('active');
+          path.setAttribute('marker-end', 'url(#arrow-active)');
+        } else {
+          path.classList.add('dimmed');
+          path.setAttribute('marker-end', 'url(#arrow)');
+        }
+      });
+    }
+
+    function clearHighlights() {
+      GRAPH_DATA.nodes.forEach(n => {
+        const el = document.getElementById(`node-${n.id}`);
+        if (el) el.classList.remove('selected', 'dimmed');
+      });
+      GRAPH_DATA.links.forEach((l, idx) => {
+        const path = document.getElementById(`link-${idx}`);
+        if (path) {
+          path.classList.remove('active', 'dimmed');
+          path.setAttribute('marker-end', 'url(#arrow)');
+        }
+      });
+    }
+
+    function focusOnNode(nodeId) {
+      const node = GRAPH_DATA.nodes.find(n => n.id === nodeId);
+      if (!node) return;
+
+      const svgRect = svg.getBoundingClientRect();
+      panX = (svgRect.width / 2) - (node.x * scale) - (inspectorPanel.classList.contains('translate-x-full') ? 0 : 120);
+      panY = (svgRect.height / 2) - (node.y * scale);
+      updateTransform();
+    }
+
+    // ==========================================
+    // 6. EVENTOS DE INTERACCIÓN
+    // ==========================================
+    function setupEvents() {
+      // Zoom con la rueda
+      svg.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+        const newScale = Math.min(Math.max(scale * zoomFactor, 0.35), 2.0);
+
+        const rect = svg.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+
+        panX = mouseX - (mouseX - panX) * (newScale / scale);
+        panY = mouseY - (mouseY - panY) * (newScale / scale);
+        scale = newScale;
+
+        updateTransform();
+      }, { passive: false });
+
+      // Paneo con arrastre
+      svg.addEventListener('mousedown', (e) => {
+        const nodeTarget = e.target.closest('.node-group');
+        if (nodeTarget) {
+          const nodeId = nodeTarget.getAttribute('data-id');
+          draggedNode = GRAPH_DATA.nodes.find(n => n.id === nodeId);
+          dragStartX = (e.clientX - panX) / scale - draggedNode.x;
+          dragStartY = (e.clientY - panY) / scale - draggedNode.y;
+          selectNode(nodeId);
+          return;
+        }
+
+        isPanning = true;
+        startPanX = e.clientX - panX;
+        startPanY = e.clientY - panY;
+      });
+
+      window.addEventListener('mousemove', (e) => {
+        if (draggedNode) {
+          draggedNode.x = (e.clientX - panX) / scale - dragStartX;
+          draggedNode.y = (e.clientY - panY) / scale - dragStartY;
+          updateNodePositions();
+          updateLinkPositions();
+          return;
+        }
+
+        if (isPanning) {
+          panX = e.clientX - startPanX;
+          panY = e.clientY - startPanY;
+          updateTransform();
+        }
+      });
+
+      window.addEventListener('mouseup', () => {
+        isPanning = false;
+        draggedNode = null;
+      });
+
+      // Cerrar Inspector
+      document.getElementById('closeInspectorBtn').onclick = () => {
+        inspectorPanel.classList.add('translate-x-full');
+        clearHighlights();
+        selectedNodeId = null;
+      };
+
+      // Centrar
+      document.getElementById('focusNodeBtn').onclick = () => {
+        if (selectedNodeId) focusOnNode(selectedNodeId);
+      };
+
+      // Auto-fit
+      document.getElementById('fitViewBtn').onclick = fitToView;
+
+      // Copiar ruta
+      document.getElementById('copyPathBtn').onclick = () => {
+        const path = document.getElementById('inspFilePath').textContent;
+        navigator.clipboard.writeText(path).then(() => {
+          const btn = document.getElementById('copyPathBtn');
+          btn.innerHTML = '<span class="text-emerald-400 font-bold text-[12px]">✓</span>';
+          setTimeout(() => {
+            btn.innerHTML = '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>';
+          }, 1500);
+        });
+      };
+
+      // Zoom botones
+      document.getElementById('zoomInBtn').onclick = () => {
+        scale = Math.min(scale * 1.2, 2.0);
+        updateTransform();
+      };
+      document.getElementById('zoomOutBtn').onclick = () => {
+        scale = Math.max(scale / 1.2, 0.35);
+        updateTransform();
+      };
+      document.getElementById('resetViewBtn').onclick = fitToView;
+
+      // Cambiar entre Flujo Vertical y Física Orgánica
+      const layersBtn = document.getElementById('viewLayersBtn');
+      const forceBtn = document.getElementById('viewForceBtn');
+
+      layersBtn.onclick = () => {
+        currentViewMode = 'layers';
+        layersBtn.className = 'px-2.5 py-1 rounded-md font-medium transition-all bg-[var(--card)] shadow-xs text-[var(--foreground)]';
+        forceBtn.className = 'px-2.5 py-1 rounded-md font-medium transition-all text-[var(--muted-foreground)] hover:text-[var(--foreground)]';
+      };
+
+      forceBtn.onclick = () => {
+        currentViewMode = 'force';
+        forceBtn.className = 'px-2.5 py-1 rounded-md font-medium transition-all bg-[var(--card)] shadow-xs text-[var(--foreground)]';
+        layersBtn.className = 'px-2.5 py-1 rounded-md font-medium transition-all text-[var(--muted-foreground)] hover:text-[var(--foreground)]';
+      };
+
+      // Búsqueda
+      searchInput.addEventListener('input', (e) => {
+        searchQuery = e.target.value.toLowerCase().trim();
+        applyFilters();
+      });
+
+      // Redimensión de ventana
+      window.addEventListener('resize', fitToView);
+    }
+
+    function applyFilters() {
+      GRAPH_DATA.nodes.forEach(node => {
+        const el = document.getElementById(`node-${node.id}`);
+        if (!el) return;
+
+        const matchesCat = (activeCategory === 'all' || node.category === activeCategory);
+        const matchesSearch = !searchQuery || 
+          node.name.toLowerCase().includes(searchQuery) ||
+          node.file.toLowerCase().includes(searchQuery) ||
+          node.summary.toLowerCase().includes(searchQuery) ||
+          node.features.some(f => f.toLowerCase().includes(searchQuery));
+
+        if (matchesCat && matchesSearch) {
+          el.style.display = '';
+          el.style.opacity = '1';
+        } else {
+          el.style.display = 'none';
+        }
+      });
+
+      GRAPH_DATA.links.forEach((link, idx) => {
+        const path = document.getElementById(`link-${idx}`);
+        if (!path) return;
+
+        const srcNode = document.getElementById(`node-${link.source}`);
+        const tgtNode = document.getElementById(`node-${link.target}`);
+
+        if (srcNode && tgtNode && srcNode.style.display !== 'none' && tgtNode.style.display !== 'none') {
+          path.style.display = '';
+        } else {
+          path.style.display = 'none';
+        }
+      });
+    }
+
+    window.addEventListener('DOMContentLoaded', initGraph);
+  </script>
+</body>
+</html>

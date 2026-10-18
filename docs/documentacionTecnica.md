@@ -106,7 +106,15 @@ Carga una sesión en la memoria del backend.
    * **Problema:** React re-renderiza frecuentemente. Phaser mantiene un loop `update()` a 60FPS. Mezclar el estado de React con los GameObjects de Phaser genera memory leaks y bajones severos de rendimiento.
    * **Solución:** Se implementó el patrón `EventBus` (`frontend/src/game/eventBus.js`). Socket.IO actualiza React, y React se comunica con la escena isométrica enviando eventos serializados (`EventBus.emit('SPAWN', data)`). El motor de juegos se mantiene agnóstico del estado de React.
 
-2. **Detección Recursiva de Subagentes:**
-   * **Problema:** El sistema multi-agente generaba los subagentes en carpetas aleatorias no vinculadas explícitamente en la raíz de la telemetría principal.
-   * **Solución:** El `parser.js` se engancha interceptando el log exacto `"Created the following subagents:"`, extrae las rutas absolutas y añade automáticamente nuevos `watchers` recursivos, centralizando la data en una misma cola temporal (`eventsQueue`).
+2. **Detección Recursiva de Subagentes y Filtrado de Tareas:**
+   * **Problema:** El sistema multi-agente generaba subagentes en carpetas aisladas, mientras que tareas de consola en background (`/task-`) generaban falsos positivos de roles especializados (ej. DBA) por coincidencias de texto en la salida estándar (`stdout`).
+   * **Solución:** `parser.js` discrimina estrictamente los mensajes de sistema: todo emisor con `/task-` se garantiza como tarea del Team Leader. Los subagentes legítimos se registran por UUID (`subagentsByUuid`) durante su instanciación (`invoke_subagent`), enlazando transcripciones recursivas sin interferencias de logs espurios.
+
+3. **Ciclo de Inactividad Espacial y Estados de Espera:**
+   * **Problema:** Los avatares permanecían en su estación de trabajo de forma indefinida, dificultando distinguir a simple vista si un agente seguía procesando o estaba esperando respuesta o bloqueado.
+   * **Solución:** Máquina de estados con umbrales temporales: a partir de 1 minuto sin eventos se activa el estado de espera con icono de reloj (`⏳`/`⏱️`) y contador dinámico. Al alcanzar 5 minutos, el avatar camina al área de descanso (lounge) preservando el acumulado de inactividad visible. Al retomar actividad (<1 min), retorna a su estación de trabajo.
+
+4. **Desacoplamiento y Estabilidad Dimensional del HUD Modal:**
+   * **Problema:** Al pasar el cursor sobre avatares, los cálculos repetitivos y el tamaño variable del contenedor de descripción producían sobrecarga en el render loop y parpadeos molestos en pantalla.
+   * **Solución:** Calibración precisa de hitboxes en Phaser con offset centrado, memoización estricta de callbacks en React y definición de altura estática de 4 líneas (`h-[82px]`, `line-clamp-4`) en el contenedor del último log, garantizando fluidez a 60 FPS y dimensiones constantes.
 

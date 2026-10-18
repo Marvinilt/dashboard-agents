@@ -79,32 +79,43 @@ export class LiveWatcher {
       });
     }
 
-    if (evt.eventType === 'SUBAGENT_CREATED' && evt.metadata?.toolArgs?.conversationId) {
-      const uuid = evt.metadata.toolArgs.conversationId;
-      const logUri = evt.metadata.toolArgs.logAbsoluteUri;
-      
-      const mappedSubagent = this.pendingSubagents.shift();
-      const agentInfo = mappedSubagent ? {
-        agentId: mappedSubagent.id,
-        agentRole: mappedSubagent.role,
-        agentName: mappedSubagent.name
-      } : { agentId: uuid, agentRole: 'developer', agentName: 'Desarrollador' };
-      
-      this.uuidToRoleMap.set(uuid, agentInfo);
-      
-      let subagentPath = null;
-      if (logUri && logUri.startsWith('file:///')) {
-        let uriPath = logUri.replace('file:///', '');
-        uriPath = decodeURIComponent(uriPath);
-        // Arreglar separadores en Windows
-        uriPath = uriPath.split('/').join(path.sep);
-        subagentPath = uriPath;
-      } else {
-        // Fallback: tratar de buscarlo en brain
-        subagentPath = path.join(DEFAULT_BRAIN_DIR, uuid, '.system_generated', 'logs', 'transcript.jsonl');
+    if (evt.eventType === 'SUBAGENT_CREATED') {
+      let subsToProcess = [];
+      if (evt.metadata?.toolArgs?.createdSubagents) {
+        subsToProcess = evt.metadata.toolArgs.createdSubagents;
+      } else if (evt.metadata?.toolArgs?.conversationId) {
+        subsToProcess = [evt.metadata.toolArgs];
       }
 
-      this.watchTranscript(subagentPath, agentInfo);
+      subsToProcess.forEach(subData => {
+        const uuid = subData.conversationId;
+        const logUri = subData.logAbsoluteUri;
+        
+        const mappedSubagent = this.pendingSubagents.shift();
+        const subAgentInfo = mappedSubagent ? {
+          agentId: mappedSubagent.id,
+          agentRole: mappedSubagent.role,
+          agentName: mappedSubagent.name
+        } : { agentId: uuid, agentRole: 'developer', agentName: 'Desarrollador' };
+        
+        if (uuid) {
+          this.uuidToRoleMap.set(uuid, subAgentInfo);
+        }
+        
+        let subagentPath = null;
+        if (logUri && logUri.startsWith('file:///')) {
+          let uriPath = logUri.replace('file:///', '');
+          uriPath = decodeURIComponent(uriPath);
+          uriPath = uriPath.split('/').join(path.sep);
+          subagentPath = uriPath.replace('transcript_full.jsonl', 'transcript.jsonl');
+        } else if (uuid) {
+          subagentPath = path.join(DEFAULT_BRAIN_DIR, uuid, '.system_generated', 'logs', 'transcript.jsonl');
+        }
+
+        if (subagentPath) {
+          this.watchTranscript(subagentPath, subAgentInfo);
+        }
+      });
     }
   }
 
@@ -115,7 +126,7 @@ export class LiveWatcher {
     let lines = 0;
     for await (const line of rl) {
       lines++;
-      const evt = parseTranscriptLine(line, agentInfo);
+      const evt = parseTranscriptLine(line, { ...agentInfo, subagentsByUuid: this.uuidToRoleMap });
       if (evt) {
         this.emitEventWithSubagents(evt);
       }
@@ -134,7 +145,7 @@ export class LiveWatcher {
       currentLine++;
       if (currentLine > processedLines) {
         this.processedLinesMap.set(filePath, currentLine);
-        const parsed = parseTranscriptLine(line, agentInfo);
+        const parsed = parseTranscriptLine(line, { ...agentInfo, subagentsByUuid: this.uuidToRoleMap });
         if (parsed) {
           this.emitEventWithSubagents(parsed);
         }

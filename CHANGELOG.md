@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 2026-10-18
+
+### Added
+- **Métricas temporales en modal informativa de avatar:** Almacenamiento persistente de la hora de inicio en la instancia del avatar, hora del último log recibido, cálculo dinámico de tiempo de trabajo y tiempo en espera.
+- **Indicador y estados de espera para avatares:** Transición a estado de espera a partir de 1 minuto sin actividad con icono de reloj e indicador de minutos; preservación del contador de tiempo de espera al trasladarse al lounge a los 5 minutos de inactividad.
+- **Tooltip extendido de logs en barra lateral:** Capacidad de inspección de hasta 500 caracteres al posar el cursor sobre cualquier log del panel lateral, mostrando detalles de comandos, archivos y argumentos de herramientas.
+
+### Changed
+- **Estabilidad dimensional en modal de avatar:** Altura estática de 4 líneas (`h-[82px]`, `line-clamp-4`) en el campo de descripción del último log, eliminando parpadeos y cambios continuos de tamaño de la ventana modal.
+- **Optimización y precisión de hover:** Calibración del área de interacción del avatar con offset horizontal para activar la modal exactamente sobre el cuerpo, y elevación de capa a `z-[200]` para garantizar visualización por encima de la barra de edición.
+- **Renderizado de textos flotantes nítido:** Supresión de fondos negros opacos en etiquetas flotantes en favor de tipografía nítida de alta definición con sombreado de borde para máxima legibilidad.
+- **Rendimiento de interfaz:** Memoización de handlers y supresión de re-renders innecesarios durante el hover sobre avatares.
+
+### Fixed
+- **Orientación direccional de asientos en escritorios:** Soporte y respeto dinámico a la orientación configurada en cada puesto (`up`, `down`, etc.), evitando forzar la pose frontal en escritorios con orientación hacia arriba.
+- **Detección y supresión de falsos positivos de DBA:** Discriminación determinista de tareas en segundo plano (`/task-`) en `parser.js`, evitando atribución incorrecta a `agent_dba` por menciones de archivos o salidas de terminal.
+- **Registro de subagentes por UUID:** Integración de mapa de subagentes (`subagentsByUuid`) tanto en el Simulador como en el Live Watcher para resolver la identidad de subagentes legítimos con sus mensajes reales.
+
 ## [1.5.1] - 2026-10-13
 
 ### Fixed
