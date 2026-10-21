@@ -22,7 +22,6 @@ app.use(cors());
 app.use(express.json());
 
 const PORT = process.env.PORT || 3001;
-const MOCK_DATA_DIR = path.resolve('mock_data');
 const SAMPLES_DIR = fs.existsSync(path.resolve('Conversaciones ejemplo'))
   ? path.resolve('Conversaciones ejemplo')
   : path.resolve('../Conversaciones ejemplo');
@@ -94,13 +93,12 @@ function scanDirectoryForSessions(baseDir, sourceTag = 'Carpeta') {
 
 // Endpoint para listar sesiones disponibles ordenadas por fecha reciente
 app.get('/api/sessions', (req, res) => {
-  const mockSessions = scanDirectoryForSessions(MOCK_DATA_DIR, 'Mock');
   const sampleSessions = scanDirectoryForSessions(SAMPLES_DIR, 'Ejemplos');
   const customSessions = customDirectory ? scanDirectoryForSessions(customDirectory, 'Brain') : [];
 
   // Unificar sesiones evitando duplicados por ID de sesión o ruta
   const sessionsMap = new Map();
-  [...sampleSessions, ...mockSessions, ...customSessions].forEach((sess) => {
+  [...sampleSessions, ...customSessions].forEach((sess) => {
     if (!sessionsMap.has(sess.id)) {
       sessionsMap.set(sess.id, sess);
     }
@@ -165,10 +163,9 @@ End If
 app.post('/api/sessions/select', async (req, res) => {
   const { sessionId, sessionPath, mode = 'simulation', speed = 3 } = req.body;
 
-  const mockSessions = scanDirectoryForSessions(MOCK_DATA_DIR, 'Mock');
   const sampleSessions = scanDirectoryForSessions(SAMPLES_DIR, 'Ejemplos');
   const customSessions = customDirectory ? scanDirectoryForSessions(customDirectory, 'Brain') : [];
-  const allSessions = [...sampleSessions, ...mockSessions, ...customSessions];
+  const allSessions = [...sampleSessions, ...customSessions];
 
   let target = null;
   if (sessionPath) {

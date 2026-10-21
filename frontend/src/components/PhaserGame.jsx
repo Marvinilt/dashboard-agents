@@ -3,7 +3,7 @@ import Phaser from 'phaser';
 import { OfficeScene } from '../game/OfficeScene';
 import { gameEvents, EVENTS } from '../game/eventBus';
 
-export const PhaserGame = ({ onAgentSelect, onGameReady, onAvatarHover, onAvatarHoverOut }) => {
+export const PhaserGame = React.memo(({ onAgentSelect, onGameReady, onAvatarHover, onAvatarHoverOut }) => {
   const containerRef = useRef(null);
   const gameRef = useRef(null);
   const sceneRef = useRef(null);
@@ -19,6 +19,10 @@ export const PhaserGame = ({ onAgentSelect, onGameReady, onAvatarHover, onAvatar
         autoCenter: Phaser.Scale.CENTER_BOTH,
         width: 928,
         height: 576,
+      },
+      render: {
+        antialias: true,
+        roundPixels: true,
       },
       backgroundColor: '#090d16',
       scene: [OfficeScene],
@@ -80,5 +84,5 @@ export const PhaserGame = ({ onAgentSelect, onGameReady, onAvatarHover, onAvatar
       <div ref={containerRef} className="w-full h-full" />
     </div>
   );
-};
+});
 
